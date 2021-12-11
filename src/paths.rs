@@ -5,19 +5,25 @@ use std::path::PathBuf;
 use crate::fail::HResult;
 
 pub fn home_path() -> HResult<PathBuf> {
-    let home = dirs_2::home_dir()?;
+    let home = dirs_2::home_dir()
+        .ok_or_else(|| failure::err_msg("Couldn't get home directory"))?;
+        
     Ok(home)
 }
 
 pub fn ranger_path() -> HResult<PathBuf> {
-    let mut ranger_path = dirs_2::config_dir()?;
+    let mut ranger_path = dirs_2::config_dir()
+        .ok_or_else(|| failure::err_msg("Couldn't get config directory"))?;
+
     ranger_path.push("ranger/");
     Ok(ranger_path)
 }
 
 #[cfg(not(target_os = "macos"))]
 pub fn hunter_path() -> HResult<PathBuf> {
-    let mut hunter_path = dirs_2::config_dir()?;
+    let mut hunter_path = dirs_2::config_dir()
+        .ok_or_else(|| failure::err_msg("Couldn't get config directory"))?;
+
     hunter_path.push("hunter/");
     Ok(hunter_path)
 }
