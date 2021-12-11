@@ -609,7 +609,7 @@ impl Previewer {
             },
             ExtPreviewer::Graphics(previewer) => {
                 let lines = Previewer::run_external(previewer, file, stale)?;
-                let gfile = lines.first()?;
+                let gfile = lines.first().expect("TODO.Nano: Find out what this does!");
                 let imgview = ImgView::new_from_file(core.clone(),
                                                      &PathBuf::from(&gfile))?;
                 Ok(PreviewWidget::ImgView(imgview))
