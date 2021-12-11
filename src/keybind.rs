@@ -395,8 +395,11 @@ where
         self
     }
 
-    fn parse_section(ini: &Ini) -> HResult<Bindings<Self>> {
-        let section = ini.section(Some(Self::section()))?;
+    fn parse_section(ini: &Ini) -> HResult<Option<Bindings<Self>>> {
+        let section = match ini.section(Some(Self::section())) {
+            Some(x) => x,
+            None => return Ok(None)
+        };
 
         let mut bindings = Bindings::new();
 
@@ -431,13 +434,14 @@ where
             }
         }
 
-        Ok(bindings)
+        Ok(Some(bindings))
     }
 
     fn load_section(ini: &Ini) -> Bindings<Self> {
-        Self::parse_section(ini)
-            .log_and()
-            .unwrap_or_else(|_| Bindings::default())
+        match Self::parse_section(ini).log_and() {
+            Ok(Some(section)) => section,
+            _ => Bindings::default()
+        }
     }
 }
 
