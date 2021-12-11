@@ -234,7 +234,8 @@ enum ExtPreviewer {
 
 fn find_previewer(file: &File, g_mode: bool) -> HResult<ExtPreviewer> {
     let path = crate::paths::previewers_path()?;
-    let ext = file.path.extension()?;
+    let ext = file.path.extension()
+        .ok_or_else(|| failure::err_msg("Couldn't get file extension"))?;
 
     // Try to find a graphical previewer first
     if g_mode {
@@ -260,20 +261,24 @@ fn find_previewer(file: &File, g_mode: bool) -> HResult<ExtPreviewer> {
                                    .and_then(|p| Ok(p.file_name() == ext ))
                                    .unwrap_or(false))
                         .map(|p| p.map(|p| p.path()));
-    match previewer {
-        Some(Ok(p)) => return Ok(ExtPreviewer::Text(p)),
-        _ => {
-            // Special case to highlight text files that aren't text/*
-            if file.is_text() {
-                let mut previewer = PathBuf::from(&path);
-                previewer.push("definitions/");
-                previewer.push("text");
-                return Ok(ExtPreviewer::Text(previewer));
-            }
-        }
+
+    if let Some(Ok(p)) = previewer {
+        return Ok(ExtPreviewer::Text(p));
     }
 
-    Ok(ExtPreviewer::Text(previewer??))
+    // Special case to highlight text files that aren't text/*
+    if file.is_text() {
+        let mut previewer = PathBuf::from(&path);
+        previewer.push("definitions/");
+        previewer.push("text");
+        return Ok(ExtPreviewer::Text(previewer));
+    }
+
+    Err(match previewer {
+        Some(Err(e)) => HError::from(e),
+        None => HError::from(failure::err_msg(format!("Couldn't find previewer for '{}'", path.to_string_lossy()))),
+        _ => unreachable!()
+    })
 }
 
 
