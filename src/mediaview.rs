@@ -157,8 +157,10 @@ impl MediaView {
                         MediaError::NoPreviewer(msg)
                     })?;
 
-                let mut stdout = BufReader::new(previewer.stdout.take()?);
-                let mut stdin = previewer.stdin.take()?;
+                let mut stdout = BufReader::new(previewer.stdout.take()
+                    .ok_or_else(|| failure::err_msg("Couldn't connect to stdout for hunter-media previewer"))?);
+                let mut stdin = previewer.stdin.take()
+                    .ok_or_else(|| failure::err_msg("Couldn't connect to stdin for hunter-media previewer"))?;
 
                 *cprocess.lock() = Some(previewer);
 
@@ -178,9 +180,11 @@ impl MediaView {
 
                 loop {
                     // Check if preview-gen finished and break out of loop to restart
-                    if let Ok(Some(code)) = cprocess.lock()
-                                                    .as_mut()?
-                                                    .try_wait()
+                    if let Ok(Some(code)) = 
+                        cprocess.lock()
+                            .as_mut()
+                            .ok_or_else(|| failure::err_msg("Couldn't acquire lock on hunter-media thread"))?
+                            .try_wait()
                     {
                         if code.success() {
                             break;
@@ -263,34 +267,37 @@ impl MediaView {
     }
 
     pub fn start_video(&mut self) -> HResult<()> {
-        let runner = self.preview_runner.take();
+        let runner = self.preview_runner;
 
-        if runner.is_some() {
-            let stale = self.stale.clone();
-            let autoplay = self.autoplay();
-            let mute = self.mute();
-            let height = self.height.clone();
-            let position = self.position.clone();
-            let duration = self.duration.clone();
-            let clear = self.get_core()?.get_clearlist()?;
-
-            std::thread::spawn(move || -> HResult<()> {
-                // Sleep a bit to avoid overloading the system when scrolling
-                let sleeptime = std::time::Duration::from_millis(50);
-                std::thread::sleep(sleeptime);
-
-                if !stale.is_stale()? {
-                    print!("{}", clear);
-
-                    runner.map(|runner| runner(autoplay,
-                                               mute,
-                                               height,
-                                               position,
-                                               duration).log());
-                }
-                Ok(())
-            });
+        if runner.is_none() {
+            return Ok(());
         }
+
+        let stale = self.stale.clone();
+        let autoplay = self.autoplay();
+        let mute = self.mute();
+        let height = self.height.clone();
+        let position = self.position.clone();
+        let duration = self.duration.clone();
+        let clear = self.get_core()?.get_clearlist()?;
+
+        std::thread::spawn(move || -> HResult<()> {
+            // Sleep a bit to avoid overloading the system when scrolling
+            let sleeptime = std::time::Duration::from_millis(50);
+            std::thread::sleep(sleeptime);
+
+            if !stale.is_stale()? {
+                print!("{}", clear);
+
+                runner.map(|runner| runner(autoplay,
+                                            mute,
+                                            height,
+                                            position,
+                                            duration).log());
+            }
+            Ok(())
+        });
+        
         Ok(())
     }
 
