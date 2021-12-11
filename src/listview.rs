@@ -336,7 +336,7 @@ impl FileListBuilder {
 
         selected_file
             .or_else(|| c.as_ref()
-                     .and_then(|c| c.get_selection(&view.content.directory).ok()))
+                     .and_then(|c| c.get_selection(&view.content.directory).ok().flatten()))
             .map(|f| view.select_file(&f));
 
         self.stale.map(|s| view.content.stale = Some(s));
