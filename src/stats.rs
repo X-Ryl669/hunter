@@ -52,7 +52,7 @@ impl FsStat {
                 }
                deepest
             });
-        let fs = self.stats.get(&deepest_match)?;
+        let fs = self.stats.get(&deepest_match).expect("This should never happen");
         Ok(fs)
     }
 }

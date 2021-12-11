@@ -116,7 +116,7 @@ impl Tabbable for TabView<FileBrowser> {
         tab.log_view  = log_view;
         tab.fs_stat = cur_tab.fs_stat.clone();
 
-        self.push_widget(tab)?;
+        self.push_widget(tab);
         self.active = self.widgets.len() - 1;
         Ok(())
     }
@@ -137,7 +137,7 @@ impl Tabbable for TabView<FileBrowser> {
     }
 
     fn goto_tab(&mut self, index: usize) -> HResult<()> {
-        self.goto_tab_(index)
+        Ok(self.goto_tab_(index))
     }
 
     fn get_tab_names(&self) -> Vec<Option<String>> {
