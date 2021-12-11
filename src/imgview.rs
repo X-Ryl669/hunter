@@ -39,7 +39,9 @@ impl ImgView {
         let (xpix, ypix) = self.core.coordinates.size_pixels()?;
         let cell_ratio = crate::term::cell_ratio()?;
 
-        let file = &self.file.as_ref()?;
+        let file = &self.file.as_ref()
+            .ok_or_else(|| failure::err_msg("imageview doesn't contain a file"))?;
+
         let media_previewer = self.core.config().media_previewer;
         let g_mode = self.core.config().graphics;
 

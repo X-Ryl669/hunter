@@ -60,7 +60,8 @@ fn has_config() -> HResult<bool> {
 
 fn install_config_all() -> HResult<()> {
     let hunter_dir = crate::paths::hunter_path()?;
-    let config_dir = hunter_dir.parent()?;
+    let config_dir = hunter_dir.parent()
+        .expect("hunter config directory must have a parent directory");
 
     if !hunter_dir.exists() {
         // create if non-existing
