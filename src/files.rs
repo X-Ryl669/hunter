@@ -970,12 +970,19 @@ impl Files {
             if refresh.is_ready() {
                 self.stale.as_ref().map(|s| s.set_fresh());
                 refresh.pull_async()?;
+
                 let mut refresh = refresh.value?;
-                self.files = refresh.new_files.take()?;
+
+                if let Some(new_files) = refresh.new_files {
+                    self.files = new_files;
+                }
+                
                 self.jobs.append(&mut refresh.jobs);
+
                 if refresh.new_len != self.len() {
                     self.len = refresh.new_len;
                 }
+
                 return Ok(Some(refresh));
             } else {
                 self.refresh.replace(refresh);
@@ -1247,7 +1254,12 @@ impl File {
     }
 
     pub fn rename(&mut self, new_path: &Path) -> HResult<()> {
-        self.name = new_path.file_name()?.to_string_lossy().to_string();
+        self.name = new_path.file_name()
+            .ok_or_else(|| failure::err_msg(
+                format!("Couldn't get new filename in path '{}'", new_path.to_string_lossy())))?
+            .to_string_lossy()
+            .to_string();
+
         self.path = new_path.into();
         Ok(())
     }
@@ -1306,13 +1318,8 @@ impl File {
             .ok();
 
         match meta {
-            Some(meta) =>
-                if meta.is_some() {
-                    Some(meta)
-                } else {
-                    None
-                },
-            None => None
+            Some(result ) if result.is_some() => Some(result),
+            _ => None
         }
     }
 
@@ -1426,18 +1433,26 @@ impl File {
         self.path.parent()
     }
 
-    pub fn parent_as_file(&self) -> HResult<File> {
-        let pathbuf = self.parent()?;
-        File::new_from_path(&pathbuf)
+    pub fn parent_as_file(&self) -> HResult<Option<File>> {
+        let pathbuf = match self.parent() {
+            Some(p) => p,
+            None => return Ok(None)
+        };
+
+        File::new_from_path(&pathbuf).map(|p| Some(p))
     }
 
     pub fn grand_parent(&self) -> Option<PathBuf> {
         Some(self.path.parent()?.parent()?.to_path_buf())
     }
 
-    pub fn grand_parent_as_file(&self) -> HResult<File> {
-        let pathbuf = self.grand_parent()?;
-        File::new_from_path(&pathbuf)
+    pub fn grand_parent_as_file(&self) -> HResult<Option<File>> {
+        let pathbuf = match self.grand_parent() {
+            Some(p) => p,
+            None => return Ok(None)
+        };
+
+        File::new_from_path(&pathbuf).map(|p| Some(p))
     }
 
     pub fn is_dir(&self) -> bool {
@@ -1542,15 +1557,32 @@ impl File {
     }
 
     pub fn is_readable(&self) -> HResult<bool> {
-        let meta = self.meta()?;
-        let meta = meta.as_ref()?;
-        let current_user = get_current_username()?.to_string_lossy().to_string();
-        let current_group = get_current_groupname()?.to_string_lossy().to_string();
-        let file_user = get_user_by_uid(meta.uid())?
+        let meta = self.meta()
+            .map(|m| m.as_ref())
+            .flatten()
+            .ok_or_else(|| failure::err_msg(
+                format!("Couldn't get metadata for file '{}'", self.path().to_string_lossy())))?;
+
+        let current_user = get_current_username()
+            .ok_or_else(|| failure::err_msg("Couldn't get current username"))?
+            .to_string_lossy()
+            .to_string();
+
+        let current_group = get_current_groupname()
+        .ok_or_else(|| failure::err_msg("Couldn't get current group name"))?
+            .to_string_lossy()
+            .to_string();
+
+        let file_user = get_user_by_uid(meta.uid())
+            .ok_or_else(|| failure::err_msg(
+                format!("Couldn't get user with id '{}'", meta.uid())))?
             .name()
             .to_string_lossy()
             .to_string();
-        let file_group = get_group_by_gid(meta.gid())?
+
+        let file_group = get_group_by_gid(meta.gid())
+        .ok_or_else(|| failure::err_msg(
+            format!("Couldn't get group with id '{}'", meta.uid())))?
             .name()
             .to_string_lossy()
             .to_string();
@@ -1572,8 +1604,11 @@ impl File {
     }
 
     pub fn pretty_print_permissions(&self) -> HResult<String> {
-        let meta = self.meta()?;
-        let meta = meta.as_ref()?;
+        let meta = self.meta()
+            .map(|m| m.as_ref())
+            .flatten()
+            .ok_or_else(|| failure::err_msg(
+                format!("Couldn't get metadata for file '{}'", self.path().to_string_lossy())))?;
 
         let perms: usize = format!("{:o}", meta.mode()).parse().unwrap();
         let perms: usize  = perms % 800;
