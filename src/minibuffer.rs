@@ -215,8 +215,10 @@ impl MiniBuffer {
             let completions = find_files(&part);
 
             if let Ok(mut completions) = completions {
-                let completion = completions.pop()?;
-                let completion = completion.to_string_lossy();
+                let completion = match completions.pop() {
+                    Some(c) => c.to_string_lossy(),
+                    None => return Ok(())
+                };
 
                 self.input
                     = self.input[..self.input.len() - part.len()].to_string();
@@ -229,8 +231,10 @@ impl MiniBuffer {
                 let completions = find_bins(&part);
 
                 if let Ok(mut completions) = completions {
-                    let completion = completions.pop()?;
-                    let completion = completion.to_string_lossy();
+                    let completion = match completions.pop() {
+                        Some(c) => c.to_string_lossy(),
+                        None => return Ok(())
+                    };
 
                     self.input = self.input[..self.input.len()
                                             - part.len()].to_string();
@@ -249,14 +253,22 @@ impl MiniBuffer {
     }
 
     pub fn cycle_completions(&mut self) -> HResult<()> {
-        let last_comp = self.last_completion.as_ref()?;
+        let last_comp = match self.last_completion {
+            Some(c) => c,
+            None => return Ok(())
+        };
+
         let last_len = last_comp.len();
 
-        self.input = self.input.trim_end_matches(last_comp).to_string();
+        self.input = self.input.trim_end_matches(&last_comp).to_string();
         self.position = self.position.saturating_sub(last_len);
 
-        let next_comp = self.completions.pop()?;
-        let next_comp = next_comp.to_string_lossy();
+    
+        let next_comp = match self.completions.pop() {
+            Some(c) => c.to_string_lossy(),
+            None => return Ok(())
+        };
+
         self.input.push_str(&next_comp);
         self.position += next_comp.len();
         self.last_completion = Some(next_comp.to_string());
@@ -375,8 +387,10 @@ impl MiniBuffer {
 pub fn find_bins(comp_name: &str) -> HResult<Vec<OsString>> {
     use osstrtools::OsStrTools;
 
-    let paths = std::env::var_os("PATH")?;
-    let paths = paths.split(":");
+    let paths = match std::env::var_os("PATH") {
+        Some(p) => p.split(":"),
+        None => return Err(HError::NoCompletionsError)
+    };
 
     let completions = paths.iter().map(|path| {
         std::fs::read_dir(path).map(|read_dir| {
@@ -417,9 +431,15 @@ pub fn find_files(comp_name: &str) -> HResult<Vec<OsString>> {
     }
 
     let comp_name = OsStr::new(comp_name);
-    let filename_part = path.file_name()?;
+    let filename_part = path.file_name()
+        .unwrap_or_else(|| panic!("Couldn't get filename for path '{}'", path.to_string_lossy()));
 
-    let dir = if path.is_dir() { &path } else { path.parent()? };
+    let dir = if path.is_dir() { 
+        &path 
+    } else { 
+        path.parent().ok_or_else(|| failure::err_msg(format!("Couldn't get parent directory of file '{}'", path.to_string_lossy())))?
+    };
+
     let dir = std::path::PathBuf::from(dir);
 
     let prefix = comp_name.trim_end(&filename_part);
@@ -453,7 +473,11 @@ pub fn find_files(comp_name: &str) -> HResult<Vec<OsString>> {
         }
     }).filter_map(|res| res.ok())
       .collect::<Vec<OsString>>();
-    if completions.is_empty() { return Err(HError::NoCompletionsError); }
+
+    if completions.is_empty() { 
+        return Err(HError::NoCompletionsError); 
+    }
+
     Ok(completions)
 }
 
