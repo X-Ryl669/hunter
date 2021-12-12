@@ -396,7 +396,9 @@ impl QuickAction {
 
         let cwd = files.get(0)
             .ok_or_else(|| failure::err_msg("no files to run"))?
-            .parent_as_file()?;
+            .parent_as_file()?
+            .unwrap_or_else(|| panic!("Couldn't get parent directory of file '{}'",
+                                      files.get(0).unwrap().path().to_string_lossy()));
 
         let files: Vec<OsString> = files.iter()
             .map(|f| OsString::from(&f.path))
