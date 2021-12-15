@@ -750,6 +750,8 @@ impl FileBrowser {
         let selected_file = self.left_widget()?.selected_file();
         self.cwd.parent_as_file()
                 .map(|dir| {
+                    let dir = dir.ok_or_else(|| failure::err_msg("Couldn't get parent of cwd"))?;
+
                     self.fs_cache
                         .set_selection(dir.clone(), selected_file.clone())
                 }).log();
