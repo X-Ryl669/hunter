@@ -651,7 +651,7 @@ impl ListView<Files>
     }
 
     fn search_next(&mut self) -> HResult<()> {
-        let prev_search = match self.searching {
+        let prev_search = match self.searching.clone() {
             Some(s) => s,
             None => {
                 self.core.show_status("No search pattern set!").log();
@@ -683,7 +683,7 @@ impl ListView<Files>
     }
 
     fn search_prev(&mut self) -> HResult<()> {
-        let prev_search = match self.searching {
+        let prev_search = match self.searching.clone() {
             Some(s) => s,
             None => {
                 self.core.show_status("No search pattern set!").log();

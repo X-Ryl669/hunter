@@ -111,7 +111,7 @@ impl History {
         self.load()?;
         let history = self.history.get(htype)
             .ok_or_else(|| failure::err_msg("TODO.Nano: Understand this error"))?;
-            
+
         let mut position = self.position;
         let hist_len = history.len();
 
@@ -220,7 +220,7 @@ impl MiniBuffer {
 
             if let Ok(mut completions) = completions {
                 let completion = match completions.pop() {
-                    Some(c) => c.to_string_lossy(),
+                    Some(c) => c.to_string_lossy().to_string(),
                     None => return Ok(())
                 };
 
@@ -236,7 +236,7 @@ impl MiniBuffer {
 
                 if let Ok(mut completions) = completions {
                     let completion = match completions.pop() {
-                        Some(c) => c.to_string_lossy(),
+                        Some(c) => c.to_string_lossy().to_string(),
                         None => return Ok(())
                     };
 
@@ -257,19 +257,19 @@ impl MiniBuffer {
     }
 
     pub fn cycle_completions(&mut self) -> HResult<()> {
-        let last_comp = match self.last_completion {
+        let last_comp = match self.last_completion.as_ref() {
             Some(c) => c,
             None => return Ok(())
         };
 
         let last_len = last_comp.len();
 
-        self.input = self.input.trim_end_matches(&last_comp).to_string();
+        self.input = self.input.trim_end_matches(last_comp).to_string();
         self.position = self.position.saturating_sub(last_len);
 
     
         let next_comp = match self.completions.pop() {
-            Some(c) => c.to_string_lossy(),
+            Some(c) => c.to_string_lossy().to_string(),
             None => return Ok(())
         };
 
@@ -392,9 +392,11 @@ pub fn find_bins(comp_name: &str) -> HResult<Vec<OsString>> {
     use osstrtools::OsStrTools;
 
     let paths = match std::env::var_os("PATH") {
-        Some(p) => p.split(":"),
+        Some(p) => p,
         None => return Err(HError::NoCompletionsError)
     };
+
+    let paths = paths.split(":");
 
     let completions = paths.iter().map(|path| {
         std::fs::read_dir(path).map(|read_dir| {

@@ -267,7 +267,7 @@ impl MediaView {
     }
 
     pub fn start_video(&mut self) -> HResult<()> {
-        let runner = self.preview_runner;
+        let runner = self.preview_runner.take();
 
         if runner.is_none() {
             return Ok(());

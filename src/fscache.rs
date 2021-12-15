@@ -200,7 +200,7 @@ impl FsCache {
     }
 
     pub fn get_selection(&self, dir: &File) -> HResult<Option<File>> {
-        let settings = match self.tab_settings.read()?.get(&dir) {
+        let settings = match self.tab_settings.read()?.get(&dir).cloned() {
             Some(s) => s,
             None => return Ok(None)
         };
