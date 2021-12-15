@@ -270,13 +270,7 @@ impl FileBrowser {
         core_m.coordinates = list_coords[1].clone();
         core_p.coordinates = list_coords[2].clone();
 
-        // TODO.Nano: This may be a bug - what happens when hunter is opened in the root directory? What should happen?
-        // Why does hunter even use the CWDs parent here instead of the CWD itself?
-        let main_path = cwd.parent()
-            .map(|path| std::path::PathBuf::from(path))
-            .ok_or_else(|| failure::err_msg(
-                format!("Couldn't get parent directory of cwd '{}'", cwd.to_string_lossy())))?;
-
+        let main_path = cwd.clone();
         let left_path = main_path.parent().map(|p| p.to_path_buf());
 
         let cache = fs_cache.clone();
