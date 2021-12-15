@@ -954,7 +954,7 @@ impl Files {
             .map(|placeholder| {
                 if let Some(item_index) = self.files.iter().position(|f| f == &placeholder) {
                     self.files.remove(item_index);
-                    
+
                     if self.len > 0 {
                         self.len -= 1;
                     }
@@ -976,8 +976,8 @@ impl Files {
 
                 let mut refresh = refresh.value?;
 
-                if let Some(new_files) = refresh.new_files {
-                    self.files = new_files;
+                if let Some(ref new_files) = refresh.new_files {
+                    self.files = new_files.clone();
                 }
                 
                 self.jobs.append(&mut refresh.jobs);
@@ -1561,8 +1561,9 @@ impl File {
 
     pub fn is_readable(&self) -> HResult<bool> {
         let meta = self.meta()
-            .map(|m| m.as_ref())
-            .flatten()
+            .ok_or_else(|| failure::err_msg(
+                format!("Couldn't get metadata for file '{}'", self.path().to_string_lossy())))?;
+        let meta = meta.as_ref()
             .ok_or_else(|| failure::err_msg(
                 format!("Couldn't get metadata for file '{}'", self.path().to_string_lossy())))?;
 
@@ -1608,8 +1609,9 @@ impl File {
 
     pub fn pretty_print_permissions(&self) -> HResult<String> {
         let meta = self.meta()
-            .map(|m| m.as_ref())
-            .flatten()
+            .ok_or_else(|| failure::err_msg(
+                format!("Couldn't get metadata for file '{}'", self.path().to_string_lossy())))?;
+        let meta = meta.as_ref()
             .ok_or_else(|| failure::err_msg(
                 format!("Couldn't get metadata for file '{}'", self.path().to_string_lossy())))?;
 
