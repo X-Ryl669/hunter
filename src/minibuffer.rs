@@ -86,7 +86,9 @@ impl History {
 
     fn get_prev(&mut self, htype: &str) -> HResult<String> {
         self.load()?;
-        let history = self.history.get(htype)?;
+        let history = self.history.get(htype)
+            .ok_or_else(|| failure::err_msg("TODO.Nano: Understand this error"))?;
+
         let mut position = self.position;
         let hist_len = history.len();
 
@@ -107,7 +109,9 @@ impl History {
 
     fn get_next(&mut self, htype: &str) -> HResult<String> {
         self.load()?;
-        let history = self.history.get(htype)?;
+        let history = self.history.get(htype)
+            .ok_or_else(|| failure::err_msg("TODO.Nano: Understand this error"))?;
+            
         let mut position = self.position;
         let hist_len = history.len();
 
