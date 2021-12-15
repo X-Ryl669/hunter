@@ -41,8 +41,6 @@ pub enum HError {
     StaleError,
     #[fail(display = "Failed: {}", _0)]
     Error(String),
-    #[fail(display = "Was None!")]
-    NoneError,
     #[fail(display = "Async Error: {}", _0)]
     AError(async_value::AError),
     #[fail(display = "No widget found")]
@@ -323,13 +321,6 @@ impl<T> From<std::sync::PoisonError<T>> for HError {
 impl<T> From<std::sync::TryLockError<T>> for HError {
     fn from(_error: std::sync::TryLockError<T>) -> Self {
         let err = HError::TryLockError;
-        err
-    }
-}
-
-impl From<std::option::NoneError> for HError {
-    fn from(_error: std::option::NoneError) -> Self {
-        let err = HError::NoneError;
         err
     }
 }

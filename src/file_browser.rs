@@ -116,7 +116,7 @@ impl Tabbable for TabView<FileBrowser> {
         tab.log_view  = log_view;
         tab.fs_stat = cur_tab.fs_stat.clone();
 
-        self.push_widget(tab)?;
+        self.push_widget(tab);
         self.active = self.widgets.len() - 1;
         Ok(())
     }
@@ -137,7 +137,7 @@ impl Tabbable for TabView<FileBrowser> {
     }
 
     fn goto_tab(&mut self, index: usize) -> HResult<()> {
-        self.goto_tab_(index)
+        Ok(self.goto_tab_(index))
     }
 
     fn get_tab_names(&self) -> Vec<Option<String>> {
@@ -270,11 +270,13 @@ impl FileBrowser {
         core_m.coordinates = list_coords[1].clone();
         core_p.coordinates = list_coords[2].clone();
 
-        let main_path = cwd.ancestors()
-                           .take(1)
-                           .map(|path| {
-                               std::path::PathBuf::from(path)
-                           }).last()?;
+        // TODO.Nano: This may be a bug - what happens when hunter is opened in the root directory? What should happen?
+        // Why does hunter even use the CWDs parent here instead of the CWD itself?
+        let main_path = cwd.parent()
+            .map(|path| std::path::PathBuf::from(path))
+            .ok_or_else(|| failure::err_msg(
+                format!("Couldn't get parent directory of cwd '{}'", cwd.to_string_lossy())))?;
+
         let left_path = main_path.parent().map(|p| p.to_path_buf());
 
         let cache = fs_cache.clone();
@@ -360,6 +362,7 @@ impl FileBrowser {
                 }
                 err @ Err(_) => err.log()
             }
+
             self.preview_widget_mut()?.set_stale().log();
             self.preview_widget_mut()?.cancel_animation().log();
             let previewer_files = self.preview_widget_mut()?.take_files().ok();
@@ -381,9 +384,10 @@ impl FileBrowser {
                     .build()
             }).log();
 
-
             let cache = self.fs_cache.clone();
-            let left_dir = self.cwd.parent_as_file()?;
+            let left_dir = self.cwd.parent_as_file()?
+                .ok_or_else(|| failure::err_msg("Couldn't get parent directory of left directory"))?;
+
             self.left_async_widget_mut()?.change_to(move |stale, core| {
                 let source = match main_files {
                     Some(files) => FileSource::Files(files),
@@ -433,7 +437,9 @@ impl FileBrowser {
             .find(|&file| file.is_dir())
             .cloned();
 
-        self.main_widget_goto(&next_dir?).log();
+        if let Some(next_dir) = next_dir {
+            self.main_widget_goto(&next_dir).log();
+        }
 
         Ok(())
     }
@@ -450,7 +456,9 @@ impl FileBrowser {
             .find(|&file| file.is_dir())
             .cloned();
 
-        self.main_widget_goto(&next_dir?).log();
+        if let Some(next_dir) = next_dir {
+            self.main_widget_goto(&next_dir).log();
+        }
 
         Ok(())
     }
@@ -513,7 +521,7 @@ impl FileBrowser {
         }).log();
 
 
-        if let Ok(grand_parent) = self.cwd()?.parent_as_file() {
+        if let Ok(Some(grand_parent)) = self.cwd()?.parent_as_file() {
             self.left_widget_goto(&grand_parent).log();
         } else {
             self.left_async_widget_mut()?.change_to(move |_,_| {
@@ -550,7 +558,7 @@ impl FileBrowser {
     }
 
     pub fn go_back(&mut self) -> HResult<()> {
-        if let Ok(new_cwd) = self.cwd.parent_as_file() {
+        if let Ok(Some(new_cwd)) = self.cwd.parent_as_file() {
             let previewer_selection = self.selected_file().ok();
             let main_selection = self.cwd.clone();
             let preview_files = self.take_main_files();
@@ -574,7 +582,7 @@ impl FileBrowser {
                     .build()
             }).log();
 
-            if let Ok(left_dir) = new_cwd.parent_as_file() {
+            if let Ok(Some(left_dir)) = new_cwd.parent_as_file() {
                 let file_source = FileSource::Path(left_dir);
                 let cache = self.fs_cache.clone();
                 self.left_async_widget_mut()?.change_to(move |stale, core| {
@@ -612,7 +620,9 @@ impl FileBrowser {
     }
 
     pub fn goto_prev_cwd(&mut self) -> HResult<()> {
-        let prev_cwd = self.prev_cwd.take()?;
+        let prev_cwd = self.prev_cwd.take()
+            .ok_or_else(|| failure::err_msg("Couldnt' get previous working directory"))?;
+
         self.main_widget_goto(&prev_cwd)?;
         Ok(())
     }
@@ -740,10 +750,11 @@ impl FileBrowser {
         let selected_file = self.left_widget()?.selected_file();
         self.cwd.parent_as_file()
                 .map(|dir| {
+                    let dir = dir.ok_or_else(|| failure::err_msg("Couldn't get parent of cwd"))?;
+
                     self.fs_cache
                         .set_selection(dir.clone(), selected_file.clone())
                 }).log();
-
 
         Ok(())
     }
@@ -820,7 +831,8 @@ impl FileBrowser {
     }
 
     pub fn main_async_widget_mut(&mut self) -> HResult<&mut AsyncWidget<ListView<Files>>> {
-        let widget = self.columns.active_widget_mut()?;
+        let widget = self.columns.active_widget_mut()
+            .ok_or_else(|| failure::err_msg("Couldn't get active widget"))?;
 
         let widget = match widget {
             FileBrowserWidgets::FileList(filelist) => filelist,
@@ -830,7 +842,8 @@ impl FileBrowser {
     }
 
     pub fn main_widget(&self) -> HResult<&ListView<Files>> {
-        let widget = self.columns.active_widget()?;
+        let widget = self.columns.active_widget()
+            .ok_or_else(|| failure::err_msg("Couldn't get active widget"))?;
 
         let widget = match widget {
             FileBrowserWidgets::FileList(filelist) => filelist.widget(),
@@ -840,7 +853,8 @@ impl FileBrowser {
     }
 
     pub fn main_widget_mut(&mut self) -> HResult<&mut ListView<Files>> {
-        let widget = self.columns.active_widget_mut()?;
+        let widget = self.columns.active_widget_mut()
+            .ok_or_else(|| failure::err_msg("Couldn't get active widget"))?;
 
         let widget = match widget {
             FileBrowserWidgets::FileList(filelist) => filelist.widget_mut(),
@@ -850,40 +864,37 @@ impl FileBrowser {
     }
 
     pub fn left_async_widget_mut(&mut self) -> HResult<&mut AsyncWidget<ListView<Files>>> {
-        let widget = match self.columns.widgets.get_mut(0)? {
-            FileBrowserWidgets::FileList(filelist) => filelist,
-            _ => { return HError::wrong_widget("previewer", "filelist"); }
-        };
-        Ok(widget)
+        match self.columns.widgets.get_mut(0) {
+            Some(FileBrowserWidgets::FileList(filelist)) => Ok(filelist),
+            _ => HError::wrong_widget("previewer", "filelist")
+        }
     }
 
     pub fn left_widget(&self) -> HResult<&ListView<Files>> {
-        let widget = match self.columns.widgets.get(0)? {
-            FileBrowserWidgets::FileList(filelist) => filelist.widget(),
-            _ => { return HError::wrong_widget("previewer", "filelist"); }
-        };
-        widget
+        match self.columns.widgets.get(0) {
+            Some(FileBrowserWidgets::FileList(filelist)) => filelist.widget(),
+            _ => HError::wrong_widget("previewer", "filelist")
+        }
     }
 
     pub fn left_widget_mut(&mut self) -> HResult<&mut ListView<Files>> {
-        let widget = match self.columns.widgets.get_mut(0)? {
-            FileBrowserWidgets::FileList(filelist) => filelist.widget_mut(),
-            _ => { return HError::wrong_widget("previewer", "filelist"); }
-        };
-        widget
+        match self.columns.widgets.get_mut(0) {
+            Some(FileBrowserWidgets::FileList(filelist)) => filelist.widget_mut(),
+            _ => HError::wrong_widget("previewer", "filelist")
+        }
     }
 
     pub fn preview_widget(&self) -> HResult<&Previewer> {
-        match self.columns.widgets.get(2)? {
-            FileBrowserWidgets::Previewer(previewer) => Ok(previewer),
-            _ => { return HError::wrong_widget("filelist", "previewer"); }
+        match self.columns.widgets.get(2) {
+            Some(FileBrowserWidgets::Previewer(previewer)) => Ok(previewer),
+            _ => HError::wrong_widget("filelist", "previewer")
         }
     }
 
     pub fn preview_widget_mut(&mut self) -> HResult<&mut Previewer> {
-        match self.columns.widgets.get_mut(2)? {
-            FileBrowserWidgets::Previewer(previewer) => Ok(previewer),
-            _ => { return HError::wrong_widget("filelist", "previewer"); }
+        match self.columns.widgets.get_mut(2) {
+            Some(FileBrowserWidgets::Previewer(previewer)) => Ok(previewer),
+            _ => HError::wrong_widget("filelist", "previewer")
         }
     }
 
@@ -938,11 +949,17 @@ impl FileBrowser {
             format!("\"{}\" ", &f.path.to_string_lossy())
         }).collect::<String>();
 
-        let mut filepath = dirs_2::home_dir()?;
+        let mut filepath = dirs_2::home_dir()
+            .ok_or_else(|| failure::err_msg("Couldn't get home directory"))?;
+
         filepath.push(".hunter_cwd");
 
+        let cwd_output = cwd.to_str()
+            .ok_or_else(|| failure::err_msg(
+                format!("Couldn't convert file path to string without losses: '{}'", cwd.to_string_lossy())))?;
+
         let output = format!("HUNTER_CWD=\"{}\"\nF=\"{}\"\nMF=({})\n",
-                             cwd.to_str()?,
+                             cwd_output,
                              selected_file,
                              selected_files);
 
@@ -1148,7 +1165,8 @@ impl FileBrowser {
                                 self.main_widget_goto(&dir).log();
                             } else if path.is_file() {
                                 let file = File::new_from_path(&path)?;
-                                let dir = file.parent_as_file()?;
+                                let dir = file.parent_as_file()?
+                                    .unwrap_or_else(|| panic!("Couldn't get parent directory of file '{}'", path.to_string_lossy()));
 
                                 self.main_widget_goto(&dir).log();
 
@@ -1169,12 +1187,14 @@ impl FileBrowser {
                         for file_path in paths {
                             if !file_path.exists() {
                                 let msg = format!("Can't find: {}",
-                                                  file_path .to_string_lossy());
+                                                  file_path.to_string_lossy());
                                 self.core.show_status(&msg).log();
                                 continue;
                             }
 
-                            let dir_path = file_path.parent()?;
+                            let dir_path = file_path.parent()
+                                .unwrap_or_else(|| panic!("Couldn't get parent directory of file '{}'", file_path.to_string_lossy()));
+
                             if self.cwd.path != dir_path {
                                 let file_dir = File::new_from_path(&dir_path);
 
@@ -1555,7 +1575,9 @@ impl Widget for FileBrowser {
                 return Ok(());
             }
             (_, Some(2)) => {
-                self.columns.active_widget_mut()?.on_key(key)?;
+                self.columns.active_widget_mut()
+                    .ok_or_else(|| failure::err_msg("Couldn't get active widget"))?
+                    .on_key(key)?;
                 return Ok(());
             }
             _ => {}

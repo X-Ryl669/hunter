@@ -60,7 +60,8 @@ fn has_config() -> HResult<bool> {
 
 fn install_config_all() -> HResult<()> {
     let hunter_dir = crate::paths::hunter_path()?;
-    let config_dir = hunter_dir.parent()?;
+    let config_dir = hunter_dir.parent()
+        .expect("hunter config directory must have a parent directory");
 
     if !hunter_dir.exists() {
         // create if non-existing
@@ -156,7 +157,10 @@ pub fn update_config(core: WidgetCore, force: bool) -> HResult<()> {
 fn update_dir<P: AsRef<Path>>(source: P, target: P) -> HResult<()> {
     for file in std::fs::read_dir(source)? {
         let file_path = file?.path();
-        let file_name = file_path.file_name()?;
+        let file_name = file_path.file_name()
+            .ok_or_else(|| failure::err_msg(
+                format!("Couldn't get file name for file '{}'", file_path.to_string_lossy())))?;
+
         let target_path = target.as_ref().join(file_name);
 
         if file_path.is_dir() {

@@ -171,7 +171,7 @@ impl FsCache {
             self.get_cached_files(dir)
         } else {
             let dir = dir.clone();
-            let selection = self.get_selection(&dir).ok();
+            let selection = self.get_selection(&dir).ok().flatten();
             let cache = self.clone();
             let files = Async::new(move |_| {
                 let mut files = Files::new_from_path_cancellable(&dir.path, stale)?;
@@ -199,14 +199,13 @@ impl FsCache {
         Ok(files)
     }
 
-    pub fn get_selection(&self, dir: &File) -> HResult<File> {
-        Ok(self.tab_settings
-           .read()?
-           .get(&dir)
-           .as_ref()?
-           .selection
-           .as_ref()?
-           .clone())
+    pub fn get_selection(&self, dir: &File) -> HResult<Option<File>> {
+        let settings = match self.tab_settings.read()?.get(&dir).cloned() {
+            Some(s) => s,
+            None => return Ok(None)
+        };
+
+        Ok(settings.selection)
     }
 
     pub fn set_selection(&self, dir: File, selection: File) -> HResult<()> {
@@ -333,7 +332,8 @@ impl FsCache {
             let mut files = file_cache.read()
                 .map_err(|e| HError::from(e))?
                 .get(&dir)
-                .ok_or(HError::NoneError)?
+                .ok_or_else(|| failure::err_msg(
+                    format!("Couldn't get cache entry for file '{}'", dir.path().to_string_lossy())))?
                 .clone();
             let tab_settings = &tab_settings;
 
@@ -365,9 +365,10 @@ impl FsCache {
                        files: &mut Files)
                        -> HResult<()> {
         let dir = &files.directory;
-        let tab_settings = cache.tab_settings.read()?.get(&dir).cloned();
-        if tab_settings.is_none() { return Ok(()) }
-        let tab_settings = tab_settings?;
+        let tab_settings = match cache.tab_settings.read()?.get(&dir).cloned() {
+            Some(s) => s,
+            None => return Ok(())
+        };
 
         if files.show_hidden != tab_settings.dir_settings.show_hidden ||
             files.filter != tab_settings.dir_settings.filter ||
@@ -467,8 +468,8 @@ impl TryFrom<DebouncedEvent> for FsEvent {
             DebouncedEvent::Remove(path)
                 => FsEvent::Remove(File::new_from_path(&path)?),
 
-            DebouncedEvent::Write(path)       |
-            DebouncedEvent::Chmod(path)
+            DebouncedEvent::Write(path)
+            | DebouncedEvent::Chmod(path)
                 =>  FsEvent::Change(File::new_from_path(&path)?),
 
             DebouncedEvent::Rename(old_path, new_path)
@@ -480,7 +481,7 @@ impl TryFrom<DebouncedEvent> for FsEvent {
             DebouncedEvent::Rescan
                 => Err(HError::INotifyError("Need to rescan".to_string()))?,
             // Ignore NoticeRemove/NoticeWrite
-            _ => None?,
+            _ => Err(failure::err_msg("NoticeRemove and NoticeWrite notify events are ignored"))?
         };
 
         Ok(event)

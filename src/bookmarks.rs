@@ -23,9 +23,8 @@ impl Bookmarks {
         self.save()?;
         Ok(())
     }
-    pub fn get(&self, key: char) -> HResult<&String> {
-        let path = self.mapping.get(&key)?;
-        Ok(path)
+    pub fn get(&self, key: char) -> Option<&String> {
+        self.mapping.get(&key)
     }
     pub fn load(&mut self) -> HResult<()> {
         let bm_file = crate::paths::bookmark_path()?;
@@ -95,17 +94,15 @@ impl BMPopup {
     pub fn pick(&mut self, cwd: String) -> HResult<String> {
         self.bookmark_path = Some(cwd);
         self.refresh()?;
-        match self.popup() {
-            Ok(_) => {},
-            Err(HError::PopupFinnished) => {},
-            err @ Err(HError::TerminalResizedError) => err?,
-            err @ Err(HError::WidgetResizedError) => err?,
-            err @ Err(_) => err?,
-        }
+
+        self.popup()?;
+
         self.get_core()?.clear()?;
 
-        let bookmark = self.bookmark_path.take();
-        Ok(bookmark?)
+        // TODO.Nano: Could this just return Ok(cwd)?
+        let bookmark = self.bookmark_path.take()
+            .ok_or_else(|| failure::err_msg("Couldn't get bookmark path"))?;
+        Ok(bookmark)
     }
 
     pub fn add(&mut self, path: &str) -> HResult<()> {
@@ -169,7 +166,9 @@ impl Widget for BMPopup {
         let mut drawlist = String::new();
 
         if !self.add_mode {
-            let cwd = self.bookmark_path.as_ref()?;
+            let cwd = self.bookmark_path.as_ref()
+                .ok_or_else(|| failure::err_msg("Couldn't get bookmark path"))?;
+
             drawlist += &self.render_line(ypos, &'`', cwd);
         }
 
@@ -191,13 +190,15 @@ impl Widget for BMPopup {
             Key::Char('`') => return HError::popup_finnished(),
             Key::Char(key) => {
                 if self.add_mode {
-                    let path = self.bookmark_path.take()?;
+                    let path = self.bookmark_path.take()
+                        .ok_or_else(|| failure::err_msg("Couldn't get bookmark path"))?;
+                        
                     self.bookmarks.add(key, &path)?;
                     self.add_mode = false;
                     self.bookmarks.save().log();
                     return HError::popup_finnished();
                 }
-                if let Ok(path) = self.bookmarks.get(key) {
+                if let Some(path) = self.bookmarks.get(key) {
                     self.bookmark_path.replace(path.clone());
                     return HError::popup_finnished();
                 }

@@ -180,15 +180,21 @@ impl FoldableWidgetExt for  ListView<Vec<LogEntry>> {
     }
 
     fn render_footer(&self) -> HResult<String> {
-        let current = self.current_fold()?;
+        let current = self.current_fold()
+            .ok_or_else(|| failure::err_msg("Couldn't get current fold"))?;
+
         if let Some(logentry) = self.content.get(current) {
             let (xsize, ysize) = self.core.coordinates.size_u();
             let (_, ypos) = self.core.coordinates.position_u();
+
             let description = logentry.description();
             let lines = logentry.lines();
+
             let start_pos = self.fold_start_pos(current);
+
             let selection = self.get_selection();
             let current_line = (selection - start_pos) + 1;
+
             let line_hint = format!("{} / {}", current_line, lines);
             let hint_xpos = xsize - line_hint.len();
             let hint_ypos = ysize + ypos + 1;
@@ -205,7 +211,9 @@ impl FoldableWidgetExt for  ListView<Vec<LogEntry>> {
                                  line_hint);
 
             Ok(footer)
-        } else { Ok("No log entries".to_string()) }
+        } else { 
+            Ok("No log entries".to_string()) 
+        }
     }
 }
 
@@ -273,7 +281,9 @@ where
     Bindings<<ListView<Vec<F>> as ActingExt>::Action>: Default {
 
     pub fn toggle_fold(&mut self) -> HResult<()> {
-        let fold = self.current_fold()?;
+        let fold = self.current_fold()
+            .ok_or_else(|| failure::err_msg("Couldn't get current fold"))?;
+
         let fold_pos = self.fold_start_pos(fold);
 
         self.content[fold].toggle_fold();

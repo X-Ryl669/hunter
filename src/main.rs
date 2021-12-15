@@ -1,6 +1,3 @@
-#![feature(vec_remove_item)]
-#![feature(trivial_bounds)]
-#![feature(try_trait)]
 #![allow(dead_code)]
 
 extern crate termion;
@@ -133,7 +130,7 @@ fn run(mut core: WidgetCore) -> HResult<()> {
 
     let filebrowser = FileBrowser::new(&core, None)?;
     let mut tabview = TabView::new(&core);
-    tabview.push_widget(filebrowser)?;
+    tabview.push_widget(filebrowser);
 
     tabview.handle_input()?;
 

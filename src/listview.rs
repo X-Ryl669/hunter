@@ -336,7 +336,7 @@ impl FileListBuilder {
 
         selected_file
             .or_else(|| c.as_ref()
-                     .and_then(|c| c.get_selection(&view.content.directory).ok()))
+                     .and_then(|c| c.get_selection(&view.content.directory).ok().flatten()))
             .map(|f| view.select_file(&f));
 
         self.stale.map(|s| view.content.stale = Some(s));
@@ -651,10 +651,14 @@ impl ListView<Files>
     }
 
     fn search_next(&mut self) -> HResult<()> {
-        if self.searching.is_none() {
-            self.core.show_status("No search pattern set!").log();
-        }
-        let prev_search = self.searching.clone()?;
+        let prev_search = match self.searching.clone() {
+            Some(s) => s,
+            None => {
+                self.core.show_status("No search pattern set!").log();
+                return Ok(())
+            }
+        };
+
         let selection = self.get_selection();
 
         let file = self.content
@@ -679,11 +683,13 @@ impl ListView<Files>
     }
 
     fn search_prev(&mut self) -> HResult<()> {
-        if self.searching.is_none() {
-            self.core.show_status("No search pattern set!").log();
-        }
-        let prev_search = self.searching.clone()?;
-
+        let prev_search = match self.searching.clone() {
+            Some(s) => s,
+            None => {
+                self.core.show_status("No search pattern set!").log();
+                return Ok(())
+            }
+        };
 
         self.reverse_sort();
 

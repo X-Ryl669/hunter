@@ -52,7 +52,8 @@ impl Screen {
     }
 
     pub fn take_size(&self) -> HResult<(usize, usize)> {
-        Ok(self.size.write().take()?)
+        Ok(self.size.write().take()
+            .ok_or_else(|| failure::err_msg("Couldn't acquire lock on terminal size RwLock"))?)
     }
 
     pub fn set_title(&mut self, title: &str) -> HResult<()> {
