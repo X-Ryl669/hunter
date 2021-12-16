@@ -37,7 +37,7 @@ impl History {
         let history = hf_content
             .lines()
             .fold(HashMap::new(), |mut hm: HMap, line| {
-                let parts = line.splitn(2, ":").collect::<Vec<&str>>();
+                let parts = line.splitn(2, ':').collect::<Vec<&str>>();
                 if parts.len() == 2 {
                     let (htype, hline) = (parts[0].to_string(), parts[1].to_string());
 
@@ -225,7 +225,7 @@ impl MiniBuffer {
     }
 
     pub fn complete(&mut self) -> HResult<()> {
-        if !self.input.ends_with(" ") {
+        if !self.input.ends_with(' ') {
             if !self.completions.is_empty() {
                 self.cycle_completions()?;
                 return Ok(());
@@ -233,7 +233,7 @@ impl MiniBuffer {
 
             let part = self
                 .input
-                .rsplitn(2, " ")
+                .rsplitn(2, ' ')
                 .take(1)
                 .map(|s| s.to_string())
                 .collect::<String>();
@@ -247,7 +247,7 @@ impl MiniBuffer {
 
                 self.input = self.input[..self.input.len() - part.len()].to_string();
                 self.input.push_str(&completion);
-                self.position += &completion.len() - part.len();
+                self.position += completion.len() - part.len();
 
                 self.last_completion = Some(completion.to_string());
                 self.completions = completions;
@@ -262,7 +262,7 @@ impl MiniBuffer {
 
                     self.input = self.input[..self.input.len() - part.len()].to_string();
                     self.input.push_str(&completion);
-                    self.position += &completion.len() - part.len();
+                    self.position += completion.len() - part.len();
 
                     self.last_completion = Some(completion.to_string());
                     self.completions = completions;
@@ -299,7 +299,7 @@ impl MiniBuffer {
 
     pub fn history_up(&mut self) -> HResult<()> {
         if self.query.as_str() == "nav" {
-            return Err(MiniBufferEvent::CyclePrev)?;
+            return Err(MiniBufferEvent::CyclePrev.into());
         }
 
         if let Ok(historic) = self.history.get_prev(&self.query) {
@@ -311,7 +311,7 @@ impl MiniBuffer {
 
     pub fn history_down(&mut self) -> HResult<()> {
         if self.query.as_str() == "nav" {
-            return Err(MiniBufferEvent::CycleNext)?;
+            return Err(MiniBufferEvent::CycleNext.into());
         }
 
         if let Ok(historic) = self.history.get_next(&self.query) {
@@ -340,7 +340,7 @@ impl MiniBuffer {
             return Ok(());
         }
 
-        if before_cursor.ends_with("/") {
+        if before_cursor.ends_with('/') {
             let mut new_input = before_cursor.to_string();
             new_input.pop();
             self.input = new_input + after_cursor;
@@ -348,8 +348,8 @@ impl MiniBuffer {
             return Ok(());
         };
 
-        let dir_boundary = before_cursor.rfind("/");
-        let word_boundary = before_cursor.rfind(" ");
+        let dir_boundary = before_cursor.rfind('/');
+        let word_boundary = before_cursor.rfind(' ');
         let boundaries = (dir_boundary, word_boundary);
 
         let new_input = match boundaries {
@@ -376,21 +376,21 @@ impl MiniBuffer {
     }
 
     pub fn input_finnished(&self) -> HResult<()> {
-        return HError::popup_finnished();
+        HError::popup_finnished()
     }
 
     pub fn input_cancelled(&self) -> HResult<()> {
         self.core.show_status("Input cancelled").log();
-        return Err(MiniBufferEvent::Cancelled)?;
+        Err(MiniBufferEvent::Cancelled.into())
     }
 
     pub fn input_updated(&self) -> HResult<()> {
-        return Err(MiniBufferEvent::NewInput(self.input.clone()))?;
+        Err(MiniBufferEvent::NewInput(self.input.clone()).into())
     }
 
     pub fn input_empty(&self) -> HResult<()> {
         self.core.show_status("Empty!").log();
-        return Err(MiniBufferEvent::Empty)?;
+        Err(MiniBufferEvent::Empty.into())
     }
 }
 
@@ -413,7 +413,7 @@ pub fn find_bins(comp_name: &str) -> HResult<Vec<OsString>> {
                     let name = file.file_name();
 
                     // If length is different that means the file starts with comp_name
-                    if &name.trim_start(comp_name).len() != &name.len() {
+                    if name.trim_start(comp_name).len() != name.len() {
                         Ok(name)
                     } else {
                         Err(HError::NoCompletionsError)
@@ -442,7 +442,7 @@ pub fn find_files(comp_name: &str) -> HResult<Vec<OsString>> {
     path.push(&comp_path);
 
     // Tried to complete on an incorrect path
-    if comp_name.ends_with("/") && !path.is_dir() {
+    if comp_name.ends_with('/') && !path.is_dir() {
         return Err(HError::NoCompletionsError);
     }
 
