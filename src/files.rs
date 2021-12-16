@@ -1,44 +1,39 @@
 use std::cmp::Ord;
 use std::collections::{HashMap, HashSet};
-use std::ops::Index;
+use std::ffi::OsStr;
 use std::fs::Metadata;
+use std::hash::{Hash, Hasher};
+use std::ops::Index;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, RwLock};
-use std::sync::mpsc::Sender;
-use std::hash::{Hash, Hasher};
 use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::ffi::OsStr;
+use std::sync::mpsc::Sender;
+use std::sync::{Arc, RwLock};
 
 use derivative::Derivative;
 
+use chrono::TimeZone;
 use failure;
+use failure::Error;
 use failure::Fail;
 use lscolors::LsColors;
-use tree_magic_fork;
-use users::{get_current_username,
-            get_current_groupname,
-            get_user_by_uid,
-            get_group_by_gid};
-use chrono::TimeZone;
-use failure::Error;
-use rayon::{ThreadPool, ThreadPoolBuilder};
-use natord::compare;
 use mime_guess;
+use natord::compare;
+use nix::{dir::*, fcntl::OFlag, sys::stat::Mode};
 use rayon::prelude::*;
-use nix::{dir::*,
-          fcntl::OFlag,
-          sys::stat::Mode};
+use rayon::{ThreadPool, ThreadPoolBuilder};
+use tree_magic_fork;
+use users::{get_current_groupname, get_current_username, get_group_by_gid, get_user_by_uid};
 
-use pathbuftools::PathBufTools;
 use async_value::{Async, Stale, StopIter};
+use pathbuftools::PathBufTools;
 
-use crate::fail::{HResult, HError, ErrorLog};
 use crate::dirty::{DirtyBit, Dirtyable};
-use crate::widget::Events;
-use crate::icon::Icons;
+use crate::fail::{ErrorLog, HError, HResult};
 use crate::fscache::{FsCache, FsEvent};
+use crate::icon::Icons;
+use crate::widget::Events;
 use lazy_static::lazy_static;
 
 lazy_static! {
@@ -55,7 +50,7 @@ pub fn tick_str() -> &'static str {
         0 => "   ",
         1 => ".  ",
         2 => ".. ",
-        _ => "..."
+        _ => "...",
     }
 }
 
@@ -75,8 +70,7 @@ pub fn start_ticking(sender: Sender<Events>) {
                 IOTICK.fetch_add(1, Ordering::Relaxed);
 
                 // Send refresh event before sleeping
-                sender.send(crate::widget::Events::WidgetReady)
-                      .unwrap();
+                sender.send(crate::widget::Events::WidgetReady).unwrap();
 
                 // All jobs done?
                 if IOTICK_CLIENTS.load(Ordering::Relaxed) == 0 {
@@ -131,9 +125,7 @@ pub fn load_tags() -> HResult<()> {
         }
 
         let tags = std::fs::read_to_string(tag_path)?;
-        let mut tags = tags.lines()
-                           .map(PathBuf::from)
-                           .collect::<Vec<PathBuf>>();
+        let mut tags = tags.lines().map(PathBuf::from).collect::<Vec<PathBuf>>();
         tags.sort();
         let mut tag_lock = TAGS.write()?;
         tag_lock.0 = true;
@@ -156,16 +148,21 @@ pub fn import_tags() -> HResult<()> {
 
 pub fn check_tag(path: &PathBuf) -> HResult<bool> {
     tags_loaded()?;
-    let tagged = TAGS.read()?.1.binary_search(path)
-                               .map_or_else(|_| false,
-                                            |_| true);
+    let tagged = TAGS
+        .read()?
+        .1
+        .binary_search(path)
+        .map_or_else(|_| false, |_| true);
     Ok(tagged)
 }
 
 pub fn tags_loaded() -> HResult<()> {
     let loaded = TAGS.read()?.0;
-    if loaded { Ok(()) }
-    else { HError::tags_not_loaded() }
+    if loaded {
+        Ok(())
+    } else {
+        HError::tags_not_loaded()
+    }
 }
 
 #[derive(Derivative)]
@@ -173,14 +170,11 @@ pub fn tags_loaded() -> HResult<()> {
 pub struct RefreshPackage {
     pub new_files: Option<Vec<File>>,
     pub new_len: usize,
-    #[derivative(Debug="ignore")]
-    #[derivative(PartialEq="ignore")]
-    #[derivative(Hash="ignore")]
-    pub jobs: Vec<Job>
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    #[derivative(Hash = "ignore")]
+    pub jobs: Vec<Job>,
 }
-
-
-
 
 impl RefreshPackage {
     fn new(mut files: Files, events: Vec<FsEvent>) -> RefreshPackage {
@@ -222,7 +216,6 @@ impl RefreshPackage {
         // Drop would set this stale after the function returns
         let stale = files.stale.take().unwrap();
 
-
         for event in events.into_iter().stop_stale(stale.clone()) {
             match event {
                 Create(mut file) => {
@@ -242,7 +235,7 @@ impl RefreshPackage {
                         files.files[fpos].rename(&new.path).log();
                         let job = files.files[fpos].refresh_meta_job();
                         jobs.push(job);
-                            }
+                    }
                 }
                 Remove(file) => {
                     if let Some(_) = file_pos_map.get(&file) {
@@ -257,8 +250,8 @@ impl RefreshPackage {
             return RefreshPackage {
                 new_files: None,
                 new_len: 0,
-                jobs: jobs
-            }
+                jobs: jobs,
+            };
         }
 
         if deleted_files.len() > 0 {
@@ -273,9 +266,9 @@ impl RefreshPackage {
         files.sort();
 
         // Need to unpack this to prevent issue with recursive Files type
-            // Also, if no files remain add placeholder and set len
+        // Also, if no files remain add placeholder and set len
         let (files, new_len) = if files.len() > 0 {
-                (std::mem::take(&mut files.files), files.len)
+            (std::mem::take(&mut files.files), files.len)
         } else {
             let placeholder = File::new_placeholder(&files.directory.path).unwrap();
             files.files.push(placeholder);
@@ -285,15 +278,17 @@ impl RefreshPackage {
         RefreshPackage {
             new_files: Some(files),
             new_len: new_len,
-            jobs: jobs
+            jobs: jobs,
         }
     }
 }
 
 // Tuple that stores path and "slots" to store metaadata in
-pub type Job = (PathBuf,
-                Option<Arc<RwLock<Option<Metadata>>>>,
-                Option<Arc<(AtomicBool, AtomicUsize)>>);
+pub type Job = (
+    PathBuf,
+    Option<Arc<RwLock<Option<Metadata>>>>,
+    Option<Arc<(AtomicBool, AtomicUsize)>>,
+);
 
 #[derive(Derivative)]
 #[derivative(PartialEq, Eq, Hash, Clone, Debug)]
@@ -301,13 +296,13 @@ pub struct Files {
     pub directory: File,
     pub files: Vec<File>,
     pub len: usize,
-    #[derivative(Debug="ignore")]
-    #[derivative(PartialEq="ignore")]
-    #[derivative(Hash="ignore")]
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    #[derivative(Hash = "ignore")]
     pub pending_events: Arc<RwLock<Vec<FsEvent>>>,
-    #[derivative(Debug="ignore")]
-    #[derivative(PartialEq="ignore")]
-    #[derivative(Hash="ignore")]
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    #[derivative(Hash = "ignore")]
     pub refresh: Option<Async<RefreshPackage>>,
     pub meta_upto: Option<usize>,
     pub sort: SortBy,
@@ -317,18 +312,18 @@ pub struct Files {
     pub filter: Option<String>,
     pub filter_selected: bool,
     pub dirty: DirtyBit,
-    #[derivative(Debug="ignore")]
-    #[derivative(PartialEq="ignore")]
-    #[derivative(Hash="ignore")]
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    #[derivative(Hash = "ignore")]
     pub jobs: Vec<Job>,
-    #[derivative(Debug="ignore")]
-    #[derivative(PartialEq="ignore")]
-    #[derivative(Hash="ignore")]
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    #[derivative(Hash = "ignore")]
     pub cache: Option<FsCache>,
-    #[derivative(Debug="ignore")]
-    #[derivative(PartialEq="ignore")]
-    #[derivative(Hash="ignore")]
-    pub stale: Option<Stale>
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    #[derivative(Hash = "ignore")]
+    pub stale: Option<Stale>,
 }
 
 impl Index<usize> for Files {
@@ -337,7 +332,6 @@ impl Index<usize> for Files {
         &self.files[pos]
     }
 }
-
 
 impl Dirtyable for Files {
     fn is_dirty(&self) -> bool {
@@ -373,7 +367,7 @@ impl Default for Files {
             dirty: DirtyBit::new(),
             jobs: vec![],
             cache: None,
-            stale: None
+            stale: None,
         }
     }
 }
@@ -381,12 +375,9 @@ impl Default for Files {
 // Stop processing stuff when Files is dropped
 impl Drop for Files {
     fn drop(&mut self) {
-        self.stale
-            .as_ref()
-            .map(|s| s.set_stale());
+        self.stale.as_ref().map(|s| s.set_stale());
     }
 }
-
 
 #[cfg(target_os = "linux")]
 #[repr(C)]
@@ -398,7 +389,6 @@ pub struct linux_dirent {
     pub d_type: u8,
     pub d_name: [u8; 0],
 }
-
 
 // This arcane spell hastens the target by around 30%.
 
@@ -418,8 +408,11 @@ pub struct linux_dirent {
 // report the kind of file in d_type. Currently that means calling
 // stat on ALL files and ithrowing away the result. This is wasteful.
 #[cfg(target_os = "linux")]
-pub fn from_getdents(fd: i32, path: &Path, nothidden: &AtomicUsize)  -> Result<Vec<File>, FileError>
-{
+pub fn from_getdents(
+    fd: i32,
+    path: &Path,
+    nothidden: &AtomicUsize,
+) -> Result<Vec<File>, FileError> {
     use libc::SYS_getdents64;
 
     // Buffer size was chosen after measuring different sizes and 4k seemed best
@@ -438,9 +431,8 @@ pub fn from_getdents(fd: i32, path: &Path, nothidden: &AtomicUsize)  -> Result<V
         More(Vec<File>),
         Skip,
         Done,
-        Err(FileError)
+        Err(FileError),
     }
-
 
     let result = crossbeam::scope(|s| {
         loop {
@@ -452,8 +444,7 @@ pub fn from_getdents(fd: i32, path: &Path, nothidden: &AtomicUsize)  -> Result<V
                 break;
             } else if nread < 0 {
                 let pathstr = path.to_string_lossy().to_string();
-                HError::log::<()>(&format!("Couldn't read dents from: {}",
-                                           &pathstr)).ok();
+                HError::log::<()>(&format!("Couldn't read dents from: {}", &pathstr)).ok();
                 break;
             }
 
@@ -478,22 +469,26 @@ pub fn from_getdents(fd: i32, path: &Path, nothidden: &AtomicUsize)  -> Result<V
                     // long as the kernel doesn't provide wrong values and
                     // the calculations are corrent this is safe to do.
                     // It's bascally (buffer[n] -> buffer[n + len(buffer[n])
-                    let d: &linux_dirent = unsafe {
-                        std::mem::transmute::<usize, &linux_dirent>(bufptr  + bpos )
-                    };
+                    let d: &linux_dirent =
+                        unsafe { std::mem::transmute::<usize, &linux_dirent>(bufptr + bpos) };
 
                     // Name lenegth is overallocated, true length can be found by checking with strlen
-                    let name_len = d.d_reclen as usize -
-                        std::mem::size_of::<u64>() -
-                        std::mem::size_of::<u64>() -
-                        std::mem::size_of::<u16>() -
-                        std::mem::size_of::<u8>();
+                    let name_len = d.d_reclen as usize
+                        - std::mem::size_of::<u64>()
+                        - std::mem::size_of::<u64>()
+                        - std::mem::size_of::<u16>()
+                        - std::mem::size_of::<u8>();
 
                     // OOB!!!
                     if bpos + name_len > BUFFER_SIZE {
-                        HError::log::<()>(&format!("WARNING: Name for file was out of bounds in: {}",
-                                                   path.to_string_lossy())).ok();
-                        return DentStatus::Err(FileError::GetDents(path.to_string_lossy().to_string()));
+                        HError::log::<()>(&format!(
+                            "WARNING: Name for file was out of bounds in: {}",
+                            path.to_string_lossy()
+                        ))
+                        .ok();
+                        return DentStatus::Err(FileError::GetDents(
+                            path.to_string_lossy().to_string(),
+                        ));
                     }
 
                     // Add length of current dirent to the current offset
@@ -504,11 +499,12 @@ pub fn from_getdents(fd: i32, path: &Path, nothidden: &AtomicUsize)  -> Result<V
                         // Safe as long as d_name is NULL terminated
                         let true_len = unsafe { libc::strlen(d.d_name.as_ptr() as *const i8) };
                         // Safe if strlen returned without SEGFAULT on OOB (if d_name weren't NULL terminated)
-                        let bytes: &[u8] = unsafe { std::slice::from_raw_parts(d.d_name.as_ptr() as *const u8,
-                                                                               true_len) };
+                        let bytes: &[u8] = unsafe {
+                            std::slice::from_raw_parts(d.d_name.as_ptr() as *const u8, true_len)
+                        };
 
                         // Don't want this
-                        if bytes.len() == 0  || bytes == b"." || bytes == b".." {
+                        if bytes.len() == 0 || bytes == b"." || bytes == b".." {
                             continue;
                         }
 
@@ -517,9 +513,8 @@ pub fn from_getdents(fd: i32, path: &Path, nothidden: &AtomicUsize)  -> Result<V
                     };
 
                     // Avoid reallocation on push
-                    let mut pathstr = std::ffi::OsString::with_capacity(path.as_os_str().len() +
-                                                                        name.len() +
-                                                                        2);
+                    let mut pathstr =
+                        std::ffi::OsString::with_capacity(path.as_os_str().len() + name.len() + 2);
                     pathstr.push(path.as_os_str());
                     pathstr.push("/");
                     pathstr.push(name);
@@ -537,37 +532,38 @@ pub fn from_getdents(fd: i32, path: &Path, nothidden: &AtomicUsize)  -> Result<V
                             // Metadata can't be seaved, but at lest
                             // stat is faster with an open fd
                             let flags = nix::fcntl::AtFlags::AT_SYMLINK_NOFOLLOW;
-                            let stat =
-                                match fstatat(fd, &path, flags) {
-                                    Ok(stat) => stat,
-                                    Err(_) => return DentStatus::Err(FileError::GetDents(path.to_string_lossy()
-                                                                                         .to_string()))
-                                };
+                            let stat = match fstatat(fd, &path, flags) {
+                                Ok(stat) => stat,
+                                Err(_) => {
+                                    return DentStatus::Err(FileError::GetDents(
+                                        path.to_string_lossy().to_string(),
+                                    ))
+                                }
+                            };
 
                             let mode = SFlag::from_bits_truncate(stat.st_mode);
 
                             match mode & SFlag::S_IFMT {
                                 SFlag::S_IFDIR => (Kind::Directory, None),
-                                _ => (Kind::File, None)
+                                _ => (Kind::File, None),
                             }
                         }
                         10 => {
                             // This is a link
-                            let target = nix::fcntl::readlinkat(fd, &path)
-                                .map(PathBuf::from).ok();
-                            let target_kind =
-                                match path.is_dir() {
-                                    true => Kind::Directory,
-                                    false => Kind::File
-                                };
+                            let target = nix::fcntl::readlinkat(fd, &path).map(PathBuf::from).ok();
+                            let target_kind = match path.is_dir() {
+                                true => Kind::Directory,
+                                false => Kind::File,
+                            };
                             (target_kind, target)
                         }
-                        _ => (Kind::File, None)
+                        _ => (Kind::File, None),
                     };
 
-                    let name = name.to_str()
-                                   .map(|n| String::from(n))
-                                   .unwrap_or_else(|| name.to_string_lossy().to_string());
+                    let name = name
+                        .to_str()
+                        .map(|n| String::from(n))
+                        .unwrap_or_else(|| name.to_string_lossy().to_string());
 
                     let hidden = name.as_bytes()[0] == b'.';
 
@@ -601,11 +597,9 @@ pub fn from_getdents(fd: i32, path: &Path, nothidden: &AtomicUsize)  -> Result<V
 
     match result {
         Ok(()) => Ok(std::mem::take(&mut *files.lock().unwrap())),
-        Err(_) => Err(FileError::GetDents(path.to_string_lossy().to_string()))
+        Err(_) => Err(FileError::GetDents(path.to_string_lossy().to_string())),
     }
 }
-
-
 
 impl Files {
     // Use getdents64 on Linux
@@ -615,9 +609,7 @@ impl Files {
 
         let nonhidden = AtomicUsize::default();
 
-        let dir  = Dir::open(path.clone(),
-                             OFlag::O_DIRECTORY,
-                             Mode::empty())
+        let dir = Dir::open(path.clone(), OFlag::O_DIRECTORY, Mode::empty())
             .map_err(|e| FileError::OpenDir(e))?;
 
         let direntries = from_getdents(dir.as_raw_fd(), path, &nonhidden)?;
@@ -629,7 +621,6 @@ impl Files {
         let mut files = Files::default();
         files.directory = File::new_from_path(&path)?;
 
-
         files.files = direntries;
         files.len = nonhidden.load(Ordering::Relaxed);
         files.stale = Some(stale);
@@ -637,21 +628,18 @@ impl Files {
         Ok(files)
     }
 
-
     #[cfg(not(target_os = "linux"))]
     pub fn new_from_path_cancellable(path: &Path, stale: Stale) -> HResult<Files> {
         use std::os::unix::io::AsRawFd;
 
         let nonhidden = AtomicUsize::default();
 
-        let mut dir = Dir::open(path.clone(),
-                                OFlag::O_DIRECTORY,
-                                Mode::empty())
+        let mut dir = Dir::open(path.clone(), OFlag::O_DIRECTORY, Mode::empty())
             .map_err(|e| FileError::OpenDir(e))?;
 
         let dirfd = dir.as_raw_fd();
 
-        let direntries  = dir
+        let direntries = dir
             .iter()
             .stop_stale(stale.clone())
             .map(|f| {
@@ -662,7 +650,7 @@ impl Files {
                 }
                 Ok(f)
             })
-            .collect::<Result<_,_>>()
+            .collect::<Result<_, _>>()
             .map_err(|e| FileError::ReadFiles(e))?;
 
         if stale.is_stale()? {
@@ -684,27 +672,28 @@ impl Files {
 
         let cache = match self.cache.clone() {
             Some(cache) => cache,
-            None => return
+            None => return,
         };
 
-        let mut jobs = self.iter_files_mut()
-                           .collect::<Vec<&mut File>>()
-                           .into_par_iter()
-                           .skip(from)
-                           .take(n)
-                           .filter_map(|f| f.prepare_meta_job(&cache))
-                           .collect::<Vec<_>>();
+        let mut jobs = self
+            .iter_files_mut()
+            .collect::<Vec<&mut File>>()
+            .into_par_iter()
+            .skip(from)
+            .take(n)
+            .filter_map(|f| f.prepare_meta_job(&cache))
+            .collect::<Vec<_>>();
 
         self.jobs.append(&mut jobs);
     }
 
     pub fn run_jobs(&mut self, sender: Sender<Events>) {
         let jobs = std::mem::take(&mut self.jobs);
-        let stale = self.stale
-                        .clone()
-                        .unwrap_or_else(Stale::new);
+        let stale = self.stale.clone().unwrap_or_else(Stale::new);
 
-        if jobs.len() == 0 { return; }
+        if jobs.len() == 0 {
+            return;
+        }
 
         std::thread::spawn(move || {
             let pool = get_pool();
@@ -713,9 +702,7 @@ impl Files {
             start_ticking(sender);
 
             pool.scope_fifo(move |s| {
-                for (path, mslot, dirsize) in jobs.into_iter()
-                                                  .stop_stale(stale.clone())
-                {
+                for (path, mslot, dirsize) in jobs.into_iter().stop_stale(stale.clone()) {
                     s.spawn_fifo(move |_| {
                         if let Some(mslot) = mslot {
                             if let Ok(meta) = std::fs::symlink_metadata(&path) {
@@ -724,9 +711,7 @@ impl Files {
                         }
 
                         if let Some(dirsize) = dirsize {
-                            let size = Dir::open(&path,
-                                                 OFlag::O_DIRECTORY,
-                                                 Mode::empty())
+                            let size = Dir::open(&path, OFlag::O_DIRECTORY, Mode::empty())
                                 .map(|mut d| d.iter().count())
                                 .map_err(|e| FileError::OpenDir(e))
                                 .log_and()
@@ -754,36 +739,33 @@ impl Files {
         self.files.get_mut(index + hidden_in_between)
     }
 
-    pub fn par_iter_files(&self) -> impl ParallelIterator<Item=&File> {
+    pub fn par_iter_files(&self) -> impl ParallelIterator<Item = &File> {
         let filter_fn = self.filter_fn();
 
-        self.files
-            .par_iter()
-            .filter(move |f| filter_fn(f))
+        self.files.par_iter().filter(move |f| filter_fn(f))
     }
 
-    pub fn iter_files(&self) -> impl Iterator<Item=&File> {
+    pub fn iter_files(&self) -> impl Iterator<Item = &File> {
         let filter_fn = self.filter_fn();
 
-        self.files
-            .iter()
-            .filter(move |&f| filter_fn(f))
+        self.files.iter().filter(move |&f| filter_fn(f))
     }
 
     pub fn files_in_between(&self, pos: usize, n_before: usize) -> usize {
         let filter_fn = self.filter_fn();
 
-        self.files[..pos].iter()
-                          .rev()
-                          .enumerate()
-                          .filter(|(_, f)| filter_fn(f))
-                          .take(n_before)
-                          .map(|(i, _)| i + 1)
-                          .last()
-                          .unwrap_or(0)
+        self.files[..pos]
+            .iter()
+            .rev()
+            .enumerate()
+            .filter(|(_, f)| filter_fn(f))
+            .take(n_before)
+            .map(|(i, _)| i + 1)
+            .last()
+            .unwrap_or(0)
     }
 
-    pub fn iter_files_from(&self, from: &File, n_before: usize) -> impl Iterator<Item=&File> {
+    pub fn iter_files_from(&self, from: &File, n_before: usize) -> impl Iterator<Item = &File> {
         let fpos = self.find_file(from).unwrap_or(0);
 
         let files_in_between = self.files_in_between(fpos, n_before);
@@ -795,7 +777,11 @@ impl Files {
             .filter(move |f| filter_fn(f))
     }
 
-    pub fn iter_files_mut_from(&mut self, from: &File, n_before: usize) -> impl Iterator<Item=&mut File> {
+    pub fn iter_files_mut_from(
+        &mut self,
+        from: &File,
+        n_before: usize,
+    ) -> impl Iterator<Item = &mut File> {
         let fpos = self.find_file(from).unwrap_or(0);
         let files_in_between = self.files_in_between(fpos, n_before);
 
@@ -806,12 +792,10 @@ impl Files {
             .filter(move |f| filter_fn(f))
     }
 
-    pub fn iter_files_mut(&mut self) -> impl Iterator<Item=&mut File> {
+    pub fn iter_files_mut(&mut self) -> impl Iterator<Item = &mut File> {
         let filter_fn = self.filter_fn();
 
-        self.files
-            .iter_mut()
-            .filter(move |f| filter_fn(f))
+        self.files.iter_mut().filter(move |f| filter_fn(f))
     }
 
     #[allow(trivial_bounds)]
@@ -821,11 +805,10 @@ impl Files {
         let show_hidden = self.show_hidden;
 
         move |f| {
-            f.kind == Kind::Placeholder ||
-                !(filter.is_some() &&
-                  !f.name.contains(filter.as_ref().unwrap())) &&
-                (!filter_selected || f.selected) &&
-                !(!show_hidden && f.name.starts_with("."))
+            f.kind == Kind::Placeholder
+                || !(filter.is_some() && !f.name.contains(filter.as_ref().unwrap()))
+                    && (!filter_selected || f.selected)
+                    && !(!show_hidden && f.name.starts_with("."))
         }
     }
 
@@ -836,14 +819,11 @@ impl Files {
         let dirs_first = self.dirs_first.clone();
         let sort = self.sort.clone();
 
-        let dircmp = move |a: &File, b: &File| {
-            match (a.is_dir(),  b.is_dir()) {
-                (true, false) if dirs_first => Less,
-                (false, true) if dirs_first => Greater,
-                _ => Equal
-            }
+        let dircmp = move |a: &File, b: &File| match (a.is_dir(), b.is_dir()) {
+            (true, false) if dirs_first => Less,
+            (false, true) if dirs_first => Greater,
+            _ => Equal,
         };
-
 
         let reverse = self.reverse;
         let namecmp = move |a: &File, b: &File| {
@@ -868,10 +848,10 @@ impl Files {
                     let b_meta = b_meta.as_ref().unwrap();
                     match a_meta.size() == b_meta.size() {
                         true => compare(&b.name, &a.name),
-                        false => b_meta.size().cmp(&a_meta.size())
+                        false => b_meta.size().cmp(&a_meta.size()),
                     }
                 }
-                _ => Equal
+                _ => Equal,
             }
         };
 
@@ -888,41 +868,33 @@ impl Files {
                     let b_meta = b_meta.as_ref().unwrap();
                     match a_meta.mtime() == b_meta.mtime() {
                         true => compare(&b.name, &a.name),
-                        false => b_meta.mtime().cmp(&a_meta.mtime())
+                        false => b_meta.mtime().cmp(&a_meta.mtime()),
                     }
                 }
-                _ => Equal
+                _ => Equal,
             }
         };
 
-
         move |a, b| match sort {
-            SortBy::Name => {
-                match dircmp(a, b) {
-                    Equal => namecmp(a, b),
-                    ord @ _ => ord
-                }
+            SortBy::Name => match dircmp(a, b) {
+                Equal => namecmp(a, b),
+                ord @ _ => ord,
             },
-            SortBy::Size => {
-                match dircmp(a, b) {
-                    Equal => sizecmp(a, b),
-                    ord @ _ => ord
-                }
-            }
-            SortBy::MTime => {
-                match dircmp(a, b) {
-                    Equal => timecmp(a, b),
-                    ord @ _ => ord
-                }
-            }
+            SortBy::Size => match dircmp(a, b) {
+                Equal => sizecmp(a, b),
+                ord @ _ => ord,
+            },
+            SortBy::MTime => match dircmp(a, b) {
+                Equal => timecmp(a, b),
+                ord @ _ => ord,
+            },
         }
     }
 
     pub fn sort(&mut self) {
         let sort = self.sorter();
 
-        self.files
-            .par_sort_unstable_by(sort);
+        self.files.par_sort_unstable_by(sort);
     }
 
     pub fn cycle_sort(&mut self) {
@@ -953,7 +925,8 @@ impl Files {
 
     fn remove_placeholder(&mut self) {
         let dirpath = self.directory.path.clone();
-        self.find_file_with_path(&dirpath).cloned()
+        self.find_file_with_path(&dirpath)
+            .cloned()
             .map(|placeholder| {
                 if let Some(item_index) = self.files.iter().position(|f| f == &placeholder) {
                     self.files.remove(item_index);
@@ -982,7 +955,7 @@ impl Files {
                 if let Some(ref new_files) = refresh.new_files {
                     self.files = new_files.clone();
                 }
-                
+
                 self.jobs.append(&mut refresh.jobs);
 
                 if refresh.new_len != self.len() {
@@ -995,7 +968,7 @@ impl Files {
             }
         }
 
-        return Ok(None)
+        return Ok(None);
     }
 
     pub fn process_fs_events(&mut self, sender: Sender<Events>) -> HResult<()> {
@@ -1011,9 +984,7 @@ impl Files {
                 Ok(refresh)
             });
 
-            refresh.on_ready(move |_,_| {
-                Ok(sender.send(Events::WidgetReady)?)
-            })?;
+            refresh.on_ready(move |_, _| Ok(sender.send(Events::WidgetReady)?))?;
 
             refresh.run()?;
 
@@ -1025,7 +996,11 @@ impl Files {
 
     pub fn path_in_here(&self, path: &Path) -> HResult<bool> {
         let dir = &self.directory.path;
-        let path = if path.is_dir() { path } else { path.parent().unwrap() };
+        let path = if path.is_dir() {
+            path
+        } else {
+            path.parent().unwrap()
+        };
         if dir == path {
             Ok(true)
         } else {
@@ -1035,7 +1010,8 @@ impl Files {
 
     pub fn find_file(&self, file: &File) -> Option<usize> {
         let comp = self.sorter();
-        let pos = self.files
+        let pos = self
+            .files
             .binary_search_by(|probe| comp(probe, file))
             .ok()?;
 
@@ -1082,9 +1058,8 @@ impl Files {
         self.len
     }
 
-    pub fn get_selected(&self) -> impl Iterator<Item=&File> {
-        self.iter_files()
-            .filter(|f| f.is_selected())
+    pub fn get_selected(&self) -> impl Iterator<Item = &File> {
+        self.iter_files().filter(|f| f.is_selected())
     }
 }
 
@@ -1092,7 +1067,7 @@ impl Files {
 pub enum Kind {
     Directory,
     File,
-    Placeholder
+    Placeholder,
 }
 
 impl std::fmt::Display for SortBy {
@@ -1112,7 +1087,6 @@ pub enum SortBy {
     Size,
     MTime,
 }
-
 
 impl PartialEq for File {
     fn eq(&self, other: &File) -> bool {
@@ -1145,7 +1119,6 @@ impl std::default::Default for File {
     }
 }
 
-
 #[derive(Clone)]
 pub struct File {
     pub name: String,
@@ -1160,15 +1133,17 @@ pub struct File {
 }
 
 impl File {
-    pub fn new(
-        name: &str,
-        path: PathBuf) -> File {
+    pub fn new(name: &str, path: PathBuf) -> File {
         let hidden = name.starts_with(".");
 
         File {
             name: name.to_string(),
             hidden: hidden,
-            kind: if path.is_dir() { Kind::Directory } else { Kind::File },
+            kind: if path.is_dir() {
+                Kind::Directory
+            } else {
+                Kind::File
+            },
             path: path,
             dirsize: None,
             target: None,
@@ -1178,9 +1153,7 @@ impl File {
         }
     }
 
-    pub fn new_from_nixentry(direntry: Entry,
-                             path: &Path,
-                             dirfd: i32) -> File {
+    pub fn new_from_nixentry(direntry: Entry, path: &Path, dirfd: i32) -> File {
         // Scary stuff to avoid some of the overhead in Rusts conversions
         // Speedup is a solid ~10%
         let name: &OsStr = unsafe {
@@ -1190,23 +1163,23 @@ impl File {
             let s: &[u8] = s.cast::<&[u8]>().as_ref().unwrap();
             // &Cstr -> &OsStr, minus the NULL byte
             let len = s.len();
-            let s = &s[..len-1] as *const [u8];
+            let s = &s[..len - 1] as *const [u8];
             s.cast::<&OsStr>().as_ref().unwrap()
         };
 
         // Avoid reallocation on push
-        let mut pathstr = std::ffi::OsString::with_capacity(path.as_os_str().len() +
-                                                            name.len() +
-                                                            2);
+        let mut pathstr =
+            std::ffi::OsString::with_capacity(path.as_os_str().len() + name.len() + 2);
         pathstr.push(path.as_os_str());
         pathstr.push("/");
         pathstr.push(name);
 
         let path = PathBuf::from(pathstr);
 
-        let name = name.to_str()
-                       .map(|n| String::from(n))
-                       .unwrap_or_else(|| name.to_string_lossy().to_string());
+        let name = name
+            .to_str()
+            .map(|n| String::from(n))
+            .unwrap_or_else(|| name.to_string_lossy().to_string());
 
         let hidden = name.as_bytes()[0] == b'.';
 
@@ -1215,18 +1188,16 @@ impl File {
                 Type::Directory => (Kind::Directory, None),
                 Type::Symlink => {
                     // Read link target
-                    let target = nix::fcntl::readlinkat(dirfd, &path)
-                        .map(PathBuf::from).ok();
-                    let target_kind =
-                        match path.is_dir() {
-                                    true => Kind::Directory,
-                                    false => Kind::File
-                                };
+                    let target = nix::fcntl::readlinkat(dirfd, &path).map(PathBuf::from).ok();
+                    let target_kind = match path.is_dir() {
+                        true => Kind::Directory,
+                        false => Kind::File,
+                    };
                     (target_kind, target)
                 }
-                _ => (Kind::File, None)
-            }
-            _ => (Kind::Placeholder, None)
+                _ => (Kind::File, None),
+            },
+            _ => (Kind::Placeholder, None),
         };
 
         File {
@@ -1260,9 +1231,14 @@ impl File {
     }
 
     pub fn rename(&mut self, new_path: &Path) -> HResult<()> {
-        self.name = new_path.file_name()
-            .ok_or_else(|| failure::err_msg(
-                format!("Couldn't get new filename in path '{}'", new_path.to_string_lossy())))?
+        self.name = new_path
+            .file_name()
+            .ok_or_else(|| {
+                failure::err_msg(format!(
+                    "Couldn't get new filename in path '{}'",
+                    new_path.to_string_lossy()
+                ))
+            })?
             .to_string_lossy()
             .to_string();
 
@@ -1275,14 +1251,13 @@ impl File {
     }
 
     pub fn refresh_meta_job(&mut self) -> Job {
-        let meta = self.meta
-            .as_ref()
-            .map_or_else(|| Arc::default(),
-                         |m| {
-                             *m.write().unwrap() = None;
-                             m.clone()
-                         });
-
+        let meta = self.meta.as_ref().map_or_else(
+            || Arc::default(),
+            |m| {
+                *m.write().unwrap() = None;
+                m.clone()
+            },
+        );
 
         (self.path.clone(), Some(meta), None)
     }
@@ -1301,12 +1276,12 @@ impl File {
             None if self.is_dir() => {
                 let dslot = match cache.get_dirsize(self) {
                     Some(dslot) => dslot,
-                    None => cache.make_dirsize(self)
+                    None => cache.make_dirsize(self),
                 };
                 self.set_dirsize(dslot.clone());
                 Some(dslot)
             }
-            _ => None
+            _ => None,
         };
 
         if mslot.is_some() || dslot.is_some() {
@@ -1318,14 +1293,11 @@ impl File {
     }
 
     pub fn meta(&self) -> Option<std::sync::RwLockReadGuard<'_, Option<Metadata>>> {
-        let meta = self.meta
-            .as_ref()?
-            .read()
-            .ok();
+        let meta = self.meta.as_ref()?.read().ok();
 
         match meta {
-            Some(result ) if result.is_some() => Some(result),
-            _ => None
+            Some(result) if result.is_some() => Some(result),
+            _ => None,
         }
     }
 
@@ -1334,9 +1306,10 @@ impl File {
         let meta = meta.as_ref()?;
         match COLORS.style_for_path_with_metadata(&self.path, Some(&meta)) {
             // TODO: Also handle bg color, bold, etc.?
-            Some(style) => style.foreground
-                                .as_ref()
-                                .map(|c| crate::term::from_lscolor(&c)),
+            Some(style) => style
+                .foreground
+                .as_ref()
+                .map(|c| crate::term::from_lscolor(&c)),
             None => None,
         }
     }
@@ -1351,18 +1324,17 @@ impl File {
                     } else {
                         return Err(FileError::MetaPending)?;
                     }
-                },
+                }
                 None => (0, ""),
             };
 
             return Ok(size);
         }
 
-
         let mut unit = 0;
         let mut size = match self.meta() {
             Some(meta) => meta.as_ref().unwrap().size(),
-            None => return Err(FileError::MetaPending)?
+            None => return Err(FileError::MetaPending)?,
         };
         while size > 1024 {
             size /= 1024;
@@ -1387,8 +1359,8 @@ impl File {
     // panic with a custom panic hook and handle it gracefully by just
     // doing nothing
     pub fn get_mime(&self) -> HResult<mime_guess::Mime> {
-        use std::panic;
         use crate::fail::MimeError;
+        use std::panic;
 
         if let Some(ext) = self.path.extension() {
             let mime = mime_guess::from_ext(&ext.to_string_lossy()).first();
@@ -1399,7 +1371,7 @@ impl File {
 
         // Take and replace panic handler which does nothing
         let panic_hook = panic::take_hook();
-        panic::set_hook(Box::new(|_| {} ));
+        panic::set_hook(Box::new(|_| {}));
 
         // Catch possible panic caused by tree_magic
         let mime = panic::catch_unwind(|| {
@@ -1410,30 +1382,29 @@ impl File {
         // Restore previous panic handler
         panic::set_hook(panic_hook);
 
-        mime.unwrap_or(None)
-            .ok_or_else(|| {
-                let file = self.name.clone();
-                HError::Mime(MimeError::Panic(file))
-            })
+        mime.unwrap_or(None).ok_or_else(|| {
+            let file = self.name.clone();
+            HError::Mime(MimeError::Panic(file))
+        })
     }
-
 
     pub fn is_text(&self) -> bool {
         tree_magic_fork::match_filepath("text/plain", &self.path)
     }
 
     pub fn is_filtered(&self, filter: &str, filter_selected: bool) -> bool {
-        self.kind == Kind::Placeholder ||
-            !(// filter.is_some() &&
-              !self.name.contains(filter// .as_ref().unwrap()
-              )) &&
-            (!filter_selected || self.selected)
+        self.kind == Kind::Placeholder
+            || !(
+                // filter.is_some() &&
+                !self.name.contains(
+                    filter, // .as_ref().unwrap()
+                )
+            ) && (!filter_selected || self.selected)
     }
 
     pub fn is_hidden(&self) -> bool {
         self.hidden
     }
-
 
     pub fn parent(&self) -> Option<&Path> {
         self.path.parent()
@@ -1442,7 +1413,7 @@ impl File {
     pub fn parent_as_file(&self) -> HResult<Option<File>> {
         let pathbuf = match self.parent() {
             Some(p) => p,
-            None => return Ok(None)
+            None => return Ok(None),
         };
 
         File::new_from_path(&pathbuf).map(|p| Some(p))
@@ -1455,7 +1426,7 @@ impl File {
     pub fn grand_parent_as_file(&self) -> HResult<Option<File>> {
         let pathbuf = match self.grand_parent() {
             Some(p) => p,
-            None => return Ok(None)
+            None => return Ok(None),
         };
 
         File::new_from_path(&pathbuf).map(|p| Some(p))
@@ -1477,7 +1448,7 @@ impl File {
         let base_path = base.path.clone();
         match self.path.strip_prefix(base_path) {
             Ok(path) => PathBuf::from(path),
-            Err(_) => self.path.clone()
+            Err(_) => self.path.clone(),
         }
     }
 
@@ -1504,7 +1475,7 @@ impl File {
     pub fn set_tag_status(&mut self, tags: &[PathBuf]) {
         match tags.contains(&self.path) {
             true => self.tag = Some(true),
-            false => self.tag = Some(false)
+            false => self.tag = Some(false),
         }
     }
 
@@ -1523,7 +1494,9 @@ impl File {
     }
 
     pub fn save_tags(&self) -> HResult<()> {
-        if self.tag.is_none() { return Ok(()); }
+        if self.tag.is_none() {
+            return Ok(());
+        }
 
         let path = self.path.clone();
         let state = self.tag.unwrap();
@@ -1537,24 +1510,25 @@ impl File {
             match state {
                 true => {
                     match tags.1.binary_search(&path) {
-                        Ok(_) => {},
-                        Err(inspos) => tags.1.insert(inspos, path)
+                        Ok(_) => {}
+                        Err(inspos) => tags.1.insert(inspos, path),
                     };
-                },
+                }
                 false => {
                     match tags.1.binary_search(&path) {
-                        Ok(delpos) => { tags.1.remove(delpos); },
+                        Ok(delpos) => {
+                            tags.1.remove(delpos);
+                        }
                         Err(_) => {}
                     };
                 }
             }
 
-            let tagstr = tags.1.iter()
-                               .fold(std::ffi::OsString::new(), |mut s, f| {
-                                   s.push(f);
-                                   s.push("\n");
-                                   s
-                               });
+            let tagstr = tags.1.iter().fold(std::ffi::OsString::new(), |mut s, f| {
+                s.push(f);
+                s.push("\n");
+                s
+            });
 
             std::fs::write(tagfile_path, tagstr.as_bytes())?;
             Ok(())
@@ -1563,12 +1537,18 @@ impl File {
     }
 
     pub fn is_readable(&self) -> HResult<bool> {
-        let meta = self.meta()
-            .ok_or_else(|| failure::err_msg(
-                format!("Couldn't get metadata for file '{}'", self.path().to_string_lossy())))?;
-        let meta = meta.as_ref()
-            .ok_or_else(|| failure::err_msg(
-                format!("Couldn't get metadata for file '{}'", self.path().to_string_lossy())))?;
+        let meta = self.meta().ok_or_else(|| {
+            failure::err_msg(format!(
+                "Couldn't get metadata for file '{}'",
+                self.path().to_string_lossy()
+            ))
+        })?;
+        let meta = meta.as_ref().ok_or_else(|| {
+            failure::err_msg(format!(
+                "Couldn't get metadata for file '{}'",
+                self.path().to_string_lossy()
+            ))
+        })?;
 
         let current_user = get_current_username()
             .ok_or_else(|| failure::err_msg("Couldn't get current username"))?
@@ -1576,20 +1556,20 @@ impl File {
             .to_string();
 
         let current_group = get_current_groupname()
-        .ok_or_else(|| failure::err_msg("Couldn't get current group name"))?
+            .ok_or_else(|| failure::err_msg("Couldn't get current group name"))?
             .to_string_lossy()
             .to_string();
 
         let file_user = get_user_by_uid(meta.uid())
-            .ok_or_else(|| failure::err_msg(
-                format!("Couldn't get user with id '{}'", meta.uid())))?
+            .ok_or_else(|| failure::err_msg(format!("Couldn't get user with id '{}'", meta.uid())))?
             .name()
             .to_string_lossy()
             .to_string();
 
         let file_group = get_group_by_gid(meta.gid())
-        .ok_or_else(|| failure::err_msg(
-            format!("Couldn't get group with id '{}'", meta.uid())))?
+            .ok_or_else(|| {
+                failure::err_msg(format!("Couldn't get group with id '{}'", meta.uid()))
+            })?
             .name()
             .to_string_lossy()
             .to_string();
@@ -1611,15 +1591,21 @@ impl File {
     }
 
     pub fn pretty_print_permissions(&self) -> HResult<String> {
-        let meta = self.meta()
-            .ok_or_else(|| failure::err_msg(
-                format!("Couldn't get metadata for file '{}'", self.path().to_string_lossy())))?;
-        let meta = meta.as_ref()
-            .ok_or_else(|| failure::err_msg(
-                format!("Couldn't get metadata for file '{}'", self.path().to_string_lossy())))?;
+        let meta = self.meta().ok_or_else(|| {
+            failure::err_msg(format!(
+                "Couldn't get metadata for file '{}'",
+                self.path().to_string_lossy()
+            ))
+        })?;
+        let meta = meta.as_ref().ok_or_else(|| {
+            failure::err_msg(format!(
+                "Couldn't get metadata for file '{}'",
+                self.path().to_string_lossy()
+            ))
+        })?;
 
         let perms: usize = format!("{:o}", meta.mode()).parse().unwrap();
-        let perms: usize  = perms % 800;
+        let perms: usize = perms % 800;
         let perms = format!("{}", perms);
 
         let r = format!("{}r", crate::term::color_green());
@@ -1627,16 +1613,19 @@ impl File {
         let x = format!("{}x", crate::term::color_red());
         let n = format!("{}-", crate::term::highlight_color());
 
-        let perms = perms.chars().map(|c| match c.to_string().parse().unwrap() {
-            1 => format!("{}{}{}", n,n,x),
-            2 => format!("{}{}{}", n,w,n),
-            3 => format!("{}{}{}", n,w,x),
-            4 => format!("{}{}{}", r,n,n),
-            5 => format!("{}{}{}", r,n,x),
-            6 => format!("{}{}{}", r,w,n),
-            7 => format!("{}{}{}", r,w,x),
-            _ => format!("---")
-        }).collect();
+        let perms = perms
+            .chars()
+            .map(|c| match c.to_string().parse().unwrap() {
+                1 => format!("{}{}{}", n, n, x),
+                2 => format!("{}{}{}", n, w, n),
+                3 => format!("{}{}{}", n, w, x),
+                4 => format!("{}{}{}", r, n, n),
+                5 => format!("{}{}{}", r, n, x),
+                6 => format!("{}{}{}", r, w, n),
+                7 => format!("{}{}{}", r, w, x),
+                _ => format!("---"),
+            })
+            .collect();
 
         Ok(perms)
     }
@@ -1647,11 +1636,11 @@ impl File {
         let uid = meta.uid();
         let file_user = users::get_user_by_uid(uid)?;
         let cur_user = users::get_current_username()?;
-        let color =
-            if file_user.name() == cur_user {
-                crate::term::color_green()
-            } else {
-                crate::term::color_red()  };
+        let color = if file_user.name() == cur_user {
+            crate::term::color_green()
+        } else {
+            crate::term::color_red()
+        };
         Some(format!("{}{}", color, file_user.name().to_string_lossy()))
     }
 
@@ -1661,11 +1650,11 @@ impl File {
         let gid = meta.gid();
         let file_group = users::get_group_by_gid(gid)?;
         let cur_group = users::get_current_groupname()?;
-        let color =
-            if file_group.name() == cur_group {
-                crate::term::color_green()
-            } else {
-                crate::term::color_red()  };
+        let color = if file_group.name() == cur_group {
+            crate::term::color_green()
+        } else {
+            crate::term::color_red()
+        };
         Some(format!("{}{}", color, file_group.name().to_string_lossy()))
     }
 
@@ -1673,8 +1662,7 @@ impl File {
         let meta = self.meta()?;
         let meta = meta.as_ref()?;
 
-        let time: chrono::DateTime<chrono::Local>
-            = chrono::Local.timestamp(meta.mtime(), 0);
+        let time: chrono::DateTime<chrono::Local> = chrono::Local.timestamp(meta.mtime(), 0);
         Some(time.format("%F %R").to_string())
     }
 
@@ -1691,19 +1679,15 @@ impl File {
     }
 }
 
-
-
 // Small wrapper that simplifies stopping with more complex control flow
 pub struct Ticker {
-    invalidated: bool
+    invalidated: bool,
 }
 
 impl Ticker {
     pub fn start_ticking(sender: Sender<Events>) -> Self {
         start_ticking(sender);
-        Ticker {
-            invalidated: false
-        }
+        Ticker { invalidated: false }
     }
 
     pub fn stop_ticking(&mut self) {

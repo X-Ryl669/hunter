@@ -1,50 +1,45 @@
 #![allow(dead_code)]
 
-use failure::Fail;
 use clap::{App, Arg};
+use failure::Fail;
 
 use std::panic;
 
+mod bookmarks;
+mod config;
+mod config_installer;
 mod coordinates;
+mod dirty;
+mod fail;
 mod file_browser;
 mod files;
+mod foldview;
+mod fscache;
+mod hbox;
+mod icon;
+mod imgview;
+mod keybind;
 mod listview;
+mod mediaview;
 mod miller_columns;
+mod minibuffer;
+mod paths;
 mod preview;
+mod proclist;
+mod quick_actions;
+mod stats;
+mod tabview;
 mod term;
 mod textview;
-mod widget;
-mod hbox;
-mod tabview;
-mod fail;
-mod minibuffer;
-mod proclist;
-mod bookmarks;
-mod paths;
-mod foldview;
-mod dirty;
-mod fscache;
-mod config;
-mod stats;
-mod icon;
-mod quick_actions;
 mod trait_ext;
-mod config_installer;
-mod imgview;
-mod mediaview;
-mod keybind;
+mod widget;
 
-
-
-
-
-use widget::{Widget, WidgetCore};
-use term::ScreenExt;
-use fail::{HResult, HError, MimeError, ErrorLog};
+use fail::{ErrorLog, HError, HResult, MimeError};
 use file_browser::FileBrowser;
 use tabview::TabView;
+use term::ScreenExt;
 use trait_ext::PathBufMime;
-
+use widget::{Widget, WidgetCore};
 
 fn reset_screen(core: &mut WidgetCore) -> HResult<()> {
     core.screen.suspend()
@@ -106,7 +101,6 @@ fn run(mut core: WidgetCore) -> HResult<()> {
     Ok(())
 }
 
-
 fn parse_args() -> clap::ArgMatches<'static> {
     App::new(clap::crate_name!())
         .version(clap::crate_version!())
@@ -158,16 +152,12 @@ fn parse_args() -> clap::ArgMatches<'static> {
         .get_matches()
 }
 
-
-
 fn process_args(args: clap::ArgMatches, core: WidgetCore) {
     let path = args.value_of("path");
 
     // Just print MIME and quit
     if args.is_present("mime") {
-        get_mime(path)
-            .map_err(|e| eprintln!("{}", e)).
-            ok();
+        get_mime(path).map_err(|e| eprintln!("{}", e)).ok();
         // If we get heres something went wrong.
         std::process::exit(1)
     }
@@ -177,18 +167,11 @@ fn process_args(args: clap::ArgMatches, core: WidgetCore) {
     }
 
     if let Some(path) = path {
-        std::env::set_current_dir(&path)
-            .map_err(HError::from)
-            .log();
+        std::env::set_current_dir(&path).map_err(HError::from).log();
     }
 
     crate::config::set_argv_config(args).log();
 }
-
-
-
-
-
 
 fn get_mime(path: Option<&str>) -> HResult<()> {
     let path = path.ok_or(MimeError::NoFileProvided)?;

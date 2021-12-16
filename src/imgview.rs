@@ -1,17 +1,15 @@
+use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::io::{BufReader, BufRead};
-use std::sync::atomic::{Ordering, AtomicU32};
+use std::sync::atomic::{AtomicU32, Ordering};
 
-use lazy_static::lazy_static;
 use derivative::Derivative;
+use lazy_static::lazy_static;
 
-use crate::widget::{Widget, WidgetCore};
 use crate::coordinates::Coordinates;
-use crate::fail::{HResult, ErrorCause};
+use crate::fail::{ErrorCause, HResult};
 use crate::mediaview::MediaError;
-
-
+use crate::widget::{Widget, WidgetCore};
 
 lazy_static! {
     static ref PID: AtomicU32 = AtomicU32::new(0);
@@ -42,15 +40,17 @@ impl ImgView {
         let (xpix, ypix) = self.core.coordinates.size_pixels()?;
         let cell_ratio = crate::term::cell_ratio()?;
 
-        let file = &self.file.as_ref()
+        let file = &self
+            .file
+            .as_ref()
             .ok_or_else(|| failure::err_msg("imageview doesn't contain a file"))?;
 
         let media_previewer = self.core.config().media_previewer;
         let g_mode = self.core.config().graphics;
 
         let mut previewer = Command::new(&media_previewer)
-            .arg(format!("{}", (xsize+1)))
-            .arg(format!("{}", (ysize+1)))
+            .arg(format!("{}", (xsize + 1)))
+            .arg(format!("{}", (ysize + 1)))
             .arg(format!("{}", xpix))
             .arg(format!("{}", ypix))
             .arg(format!("{}", cell_ratio))
@@ -64,11 +64,13 @@ impl ImgView {
             .stderr(Stdio::piped())
             .spawn()
             .map_err(|e| {
-                let msg = format!("Couldn't run {}{}{}! Error: {:?}",
-                                  crate::term::color_red(),
-                                  media_previewer,
-                                  crate::term::normal_color(),
-                                  &e.kind());
+                let msg = format!(
+                    "Couldn't run {}{}{}! Error: {:?}",
+                    crate::term::color_red(),
+                    media_previewer,
+                    crate::term::normal_color(),
+                    &e.kind()
+                );
 
                 self.core.show_status(&msg).ok();
 
@@ -77,17 +79,13 @@ impl ImgView {
 
         PID.store(previewer.id(), Ordering::Relaxed);
 
-        let stdout = previewer.stdout
-                              .take()
-                              .unwrap();
+        let stdout = previewer.stdout.take().unwrap();
 
         let output = BufReader::new(stdout)
             .lines()
             .collect::<Result<Vec<String>, _>>()?;
 
-        let stderr = previewer.stderr
-                              .take()
-                              .unwrap();
+        let stderr = previewer.stderr.take().unwrap();
 
         let stderr = BufReader::new(stderr)
             .lines()
@@ -99,9 +97,8 @@ impl ImgView {
 
         if !status.success() {
             match status.code() {
-                Some(code) => Err(MediaError::MediaViewerFailed(code,
-                                                                ErrorCause::Str(stderr)))?,
-                None => Err(MediaError::MediaViewerKilled)?
+                Some(code) => Err(MediaError::MediaViewerFailed(code, ErrorCause::Str(stderr)))?,
+                None => Err(MediaError::MediaViewerKilled)?,
             }
         }
 
@@ -119,12 +116,16 @@ impl ImgView {
     }
 
     pub fn kill_running() {
-        use nix::{unistd::Pid,
-                  sys::signal::{kill, Signal}};
+        use nix::{
+            sys::signal::{kill, Signal},
+            unistd::Pid,
+        };
 
         let pid = PID.load(Ordering::Relaxed);
 
-        if pid == 0 { return; }
+        if pid == 0 {
+            return;
+        }
 
         let pid = Pid::from_raw(pid as i32);
         kill(pid, Signal::SIGTERM).ok();
@@ -132,7 +133,6 @@ impl ImgView {
         PID.store(0, Ordering::Relaxed);
     }
 }
-
 
 impl Widget for ImgView {
     fn get_core(&self) -> HResult<&WidgetCore> {
@@ -144,7 +144,9 @@ impl Widget for ImgView {
     }
 
     fn set_coordinates(&mut self, coordinates: &Coordinates) -> HResult<()> {
-        if &self.core.coordinates == coordinates { return Ok(()) }
+        if &self.core.coordinates == coordinates {
+            return Ok(());
+        }
 
         self.core.coordinates = coordinates.clone();
         if self.file.is_some() {
@@ -155,22 +157,21 @@ impl Widget for ImgView {
     }
 
     fn refresh(&mut self) -> HResult<()> {
-
         Ok(())
     }
 
     fn get_drawlist(&self) -> HResult<String> {
         let (xpos, ypos) = self.core.coordinates.position_u();
 
-        let mut draw = self.buffer
-            .iter()
-            .enumerate()
-            .fold(String::new(), |mut draw, (pos, line)| {
-                draw += &format!("{}", crate::term::goto_xy_u(xpos,
-                                                              ypos + pos));
-                draw += line;
-                draw
-            });
+        let mut draw =
+            self.buffer
+                .iter()
+                .enumerate()
+                .fold(String::new(), |mut draw, (pos, line)| {
+                    draw += &format!("{}", crate::term::goto_xy_u(xpos, ypos + pos));
+                    draw += line;
+                    draw
+                });
 
         draw += &format!("{}", termion::style::Reset);
 

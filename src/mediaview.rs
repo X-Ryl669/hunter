@@ -1,17 +1,19 @@
-use lazy_static::lazy_static;
-use termion::event::Key;
 use failure::{self, Fail};
+use lazy_static::lazy_static;
 use parking_lot::{Mutex, RwLock};
+use termion::event::Key;
 
-use crate::widget::{Widget, WidgetCore};
 use crate::coordinates::Coordinates;
-use async_value::Stale;
-use crate::fail::{HResult, HError, ErrorLog, ErrorCause};
+use crate::fail::{ErrorCause, ErrorLog, HError, HResult};
 use crate::imgview::ImgView;
+use crate::widget::{Widget, WidgetCore};
+use async_value::Stale;
 
 use std::path::{Path, PathBuf};
-use std::sync::{Arc,
-                mpsc::{channel, Sender}};
+use std::sync::{
+    mpsc::{channel, Sender},
+    Arc,
+};
 
 use std::io::{BufRead, BufReader, Write};
 use std::process::Child;
@@ -57,33 +59,42 @@ pub struct MediaView {
     duration: Arc<Mutex<usize>>,
     stale: Stale,
     process: Arc<Mutex<Option<Child>>>,
-    preview_runner: Option<Box<dyn FnOnce(bool,
-                                          bool,
-                                          Arc<Mutex<usize>>,
-                                          Arc<Mutex<usize>>,
-                                          Arc<Mutex<usize>>)
-                                          -> HResult<()> + Send + 'static>>
+    preview_runner: Option<
+        Box<
+            dyn FnOnce(
+                    bool,
+                    bool,
+                    Arc<Mutex<usize>>,
+                    Arc<Mutex<usize>>,
+                    Arc<Mutex<usize>>,
+                ) -> HResult<()>
+                + Send
+                + 'static,
+        >,
+    >,
 }
 
-#[derive(Clone,Debug)]
+#[derive(Clone, Debug)]
 pub enum MediaType {
     Video,
-    Audio
+    Audio,
 }
 
 impl MediaType {
     pub fn to_str(&self) -> &str {
         match self {
             MediaType::Video => "video",
-            MediaType::Audio => "audio"
+            MediaType::Audio => "audio",
         }
     }
 }
 
 impl MediaView {
-    pub fn new_from_file(core: WidgetCore,
-                         file: &Path,
-                         media_type: MediaType) -> HResult<MediaView> {
+    pub fn new_from_file(
+        core: WidgetCore,
+        file: &Path,
+        media_type: MediaType,
+    ) -> HResult<MediaView> {
         let imgview = ImgView {
             core: core.clone(),
             buffer: vec![],
@@ -108,147 +119,147 @@ impl MediaView {
         let media_previewer = core.config().media_previewer;
         let g_mode = core.config().graphics;
 
-        let run_preview = Box::new(move | auto,
-                                   mute,
-                                   height: Arc<Mutex<usize>>,
-                                   position: Arc<Mutex<usize>>,
-                                   duration: Arc<Mutex<usize>>| -> HResult<()> {
-            loop {
-                if tstale.is_stale()? {
-                    return Ok(());
-                }
+        let run_preview = Box::new(
+            move |auto,
+                  mute,
+                  height: Arc<Mutex<usize>>,
+                  position: Arc<Mutex<usize>>,
+                  duration: Arc<Mutex<usize>>|
+                  -> HResult<()> {
+                loop {
+                    if tstale.is_stale()? {
+                        return Ok(());
+                    }
 
-                // Use current size. Widget could have been resized at some point
-                let (xsize, ysize, xpix, ypix) =
-                {
-                    let view = thread_imgview.lock();
-                    let (xsize, ysize) = view.core.coordinates.size_u();
-                    let (xpix, ypix) = view.core.coordinates.size_pixels()?;
-                    (xsize, ysize, xpix, ypix)
-                };
-                let cell_ratio = crate::term::cell_ratio()?;
+                    // Use current size. Widget could have been resized at some point
+                    let (xsize, ysize, xpix, ypix) = {
+                        let view = thread_imgview.lock();
+                        let (xsize, ysize) = view.core.coordinates.size_u();
+                        let (xpix, ypix) = view.core.coordinates.size_pixels()?;
+                        (xsize, ysize, xpix, ypix)
+                    };
+                    let cell_ratio = crate::term::cell_ratio()?;
 
+                    let mut previewer = std::process::Command::new(&media_previewer)
+                        .arg(format!("{}", (xsize + 1)))
+                        // Leave space for position/seek bar
+                        .arg(format!("{}", (ysize - 1)))
+                        .arg(format!("{}", xpix))
+                        .arg(format!("{}", ypix))
+                        .arg(format!("{}", cell_ratio))
+                        .arg(format!("{}", ctype.to_str()))
+                        .arg(format!("{}", auto))
+                        .arg(format!("{}", mute))
+                        .arg(format!("{}", g_mode))
+                        .arg(&path)
+                        .stdin(std::process::Stdio::piped())
+                        .stdout(std::process::Stdio::piped())
+                        .stderr(std::process::Stdio::null())
+                        .spawn()
+                        .map_err(|e| {
+                            let msg = format!(
+                                "Couldn't run {}{}{}! Error: {:?}",
+                                crate::term::color_red(),
+                                media_previewer,
+                                crate::term::normal_color(),
+                                &e.kind()
+                            );
 
-                let mut previewer = std::process::Command::new(&media_previewer)
-                    .arg(format!("{}", (xsize+1)))
-                    // Leave space for position/seek bar
-                    .arg(format!("{}", (ysize-1)))
-                    .arg(format!("{}", xpix))
-                    .arg(format!("{}", ypix))
-                    .arg(format!("{}", cell_ratio))
-                    .arg(format!("{}", ctype.to_str()))
-                    .arg(format!("{}", auto))
-                    .arg(format!("{}", mute))
-                    .arg(format!("{}", g_mode))
-                    .arg(&path)
-                    .stdin(std::process::Stdio::piped())
-                    .stdout(std::process::Stdio::piped())
-                    .stderr(std::process::Stdio::null())
-                    .spawn()
-                    .map_err(|e| {
-                        let msg = format!("Couldn't run {}{}{}! Error: {:?}",
-                                          crate::term::color_red(),
-                                          media_previewer,
-                                          crate::term::normal_color(),
-                                          &e.kind());
+                            ccore.show_status(&msg).log();
 
-                        ccore.show_status(&msg).log();
+                            MediaError::NoPreviewer(msg)
+                        })?;
 
-                        MediaError::NoPreviewer(msg)
+                    let mut stdout = BufReader::new(previewer.stdout.take().ok_or_else(|| {
+                        failure::err_msg("Couldn't connect to stdout for hunter-media previewer")
+                    })?);
+                    let mut stdin = previewer.stdin.take().ok_or_else(|| {
+                        failure::err_msg("Couldn't connect to stdin for hunter-media previewer")
                     })?;
 
-                let mut stdout = BufReader::new(previewer.stdout.take()
-                    .ok_or_else(|| failure::err_msg("Couldn't connect to stdout for hunter-media previewer"))?);
-                let mut stdin = previewer.stdin.take()
-                    .ok_or_else(|| failure::err_msg("Couldn't connect to stdin for hunter-media previewer"))?;
+                    *cprocess.lock() = Some(previewer);
 
-                *cprocess.lock() = Some(previewer);
+                    let mut frame = vec![];
+                    let newline = String::from("\n");
+                    let mut line_buf = String::new();
+                    let rx_cmd = rx_cmd.clone();
 
-                let mut frame = vec![];
-                let newline = String::from("\n");
-                let mut line_buf = String::new();
-                let rx_cmd = rx_cmd.clone();
+                    std::thread::spawn(move || -> HResult<()> {
+                        for cmd in rx_cmd.lock().iter() {
+                            write!(stdin, "{}", cmd)?;
+                            write!(stdin, "\n")?;
+                            stdin.flush()?;
+                        }
+                        Ok(())
+                    });
 
-                std::thread::spawn(move || -> HResult<()> {
-                    for cmd in rx_cmd.lock().iter() {
-                        write!(stdin, "{}", cmd)?;
-                        write!(stdin, "\n")?;
-                        stdin.flush()?;
-                    }
-                    Ok(())
-                });
-
-                loop {
-                    // Check if preview-gen finished and break out of loop to restart
-                    if let Ok(Some(code)) = 
-                        cprocess.lock()
+                    loop {
+                        // Check if preview-gen finished and break out of loop to restart
+                        if let Ok(Some(code)) = cprocess
+                            .lock()
                             .as_mut()
-                            .ok_or_else(|| failure::err_msg("Couldn't acquire lock on hunter-media thread"))?
+                            .ok_or_else(|| {
+                                failure::err_msg("Couldn't acquire lock on hunter-media thread")
+                            })?
                             .try_wait()
-                    {
-                        if code.success() {
-                            break;
+                        {
+                            if code.success() {
+                                break;
+                            } else {
+                                let msg = String::from("hunter-media failed!");
+                                return Err(failure::format_err!("{}", msg))?;
+                            }
+                        }
+
+                        stdout.read_line(&mut line_buf)?;
+
+                        // Newline means frame is complete
+                        if line_buf == newline {
+                            let new_height;
+
+                            line_buf.clear();
+                            stdout.read_line(&mut line_buf)?;
+                            let h = line_buf.trim().parse::<usize>()?;
+
+                            let mut height = height.lock();
+                            if *height != h {
+                                new_height = true;
+                            } else {
+                                new_height = false;
+                            }
+                            *height = h;
+
+                            line_buf.clear();
+                            stdout.read_line(&mut line_buf)?;
+                            let pos = &line_buf.trim();
+                            *position.lock() = pos.parse::<usize>()?;
+
+                            line_buf.clear();
+                            stdout.read_line(&mut line_buf)?;
+                            let dur = &line_buf.trim();
+                            *duration.lock() = dur.parse::<usize>()?;
+
+                            let mut imgview = thread_imgview.lock();
+                            if new_height {
+                                imgview.core.clear()?;
+                            }
+                            imgview.set_image_data(frame);
+                            sender
+                                .send(crate::widget::Events::WidgetReady)
+                                .map_err(|e| HError::from(e))
+                                .log();
+
+                            line_buf.clear();
+                            frame = vec![];
+                            continue;
                         } else {
-                            let msg = String::from("hunter-media failed!");
-                            return Err(failure::format_err!("{}", msg))?;
+                            frame.push(line_buf);
+                            line_buf = String::new();
                         }
-                    }
-
-
-                    stdout.read_line(&mut line_buf)?;
-
-
-                    // Newline means frame is complete
-                    if line_buf == newline {
-                        let new_height;
-
-                        line_buf.clear();
-                        stdout.read_line(&mut line_buf)?;
-                        let h = line_buf.trim().parse::<usize>()?;
-
-                        let mut height = height.lock();
-                        if *height != h {
-                            new_height = true;
-                        } else {
-                            new_height = false;
-                        }
-                        *height = h;
-
-
-                        line_buf.clear();
-                        stdout.read_line(&mut line_buf)?;
-                        let pos = &line_buf.trim();
-                        *position.lock() = pos
-                            .parse::<usize>()?;
-
-
-                        line_buf.clear();
-                        stdout.read_line(&mut line_buf)?;
-                        let dur = &line_buf.trim();
-                        *duration.lock() = dur
-                            .parse::<usize>()?;
-
-
-                        let mut imgview = thread_imgview.lock();
-                        if new_height {
-                            imgview.core.clear()?;
-                        }
-                        imgview.set_image_data(frame);
-                        sender.send(crate::widget::Events::WidgetReady)
-                              .map_err(|e| HError::from(e))
-                              .log();
-
-                        line_buf.clear();
-                        frame = vec![];
-                        continue;
-                    } else {
-                        frame.push(line_buf);
-                        line_buf = String::new();
                     }
                 }
-            }
-        });
-
+            },
+        );
 
         Ok(MediaView {
             core: core.clone(),
@@ -262,7 +273,7 @@ impl MediaView {
             duration: Arc::new(Mutex::new(0)),
             stale: stale,
             process: process,
-            preview_runner: Some(run_preview)
+            preview_runner: Some(run_preview),
         })
     }
 
@@ -289,15 +300,11 @@ impl MediaView {
             if !stale.is_stale()? {
                 print!("{}", clear);
 
-                runner.map(|runner| runner(autoplay,
-                                            mute,
-                                            height,
-                                            position,
-                                            duration).log());
+                runner.map(|runner| runner(autoplay, mute, height, position, duration).log());
             }
             Ok(())
         });
-        
+
         Ok(())
     }
 
@@ -306,7 +313,7 @@ impl MediaView {
     }
 
     pub fn pause(&self) -> HResult<()> {
-        Ok(self.controller.send(String::from ("a"))?)
+        Ok(self.controller.send(String::from("a"))?)
     }
 
     pub fn progress_bar(&self) -> HResult<String> {
@@ -316,17 +323,19 @@ impl MediaView {
         let duration = self.duration.lock().clone();
 
         if duration == 0 || position == 0 {
-            Ok(format!("{:elements$}", "|", elements=xsize))
+            Ok(format!("{:elements$}", "|", elements = xsize))
         } else {
             let element_percent = 100 as f32 / xsize as f32;
             let progress_percent = position as f32 / duration as f32 * 100 as f32;
             let element_count = progress_percent as f32 / element_percent as f32;
 
-            Ok(format!("{:|>elements$}|{: >empty$}",
-                       "",
-                       "",
-                       empty=xsize - (element_count as usize),
-                       elements=element_count as usize))
+            Ok(format!(
+                "{:|>elements$}|{: >empty$}",
+                "",
+                "",
+                empty = xsize - (element_count as usize),
+                elements = element_count as usize
+            ))
         }
     }
 
@@ -351,19 +360,19 @@ impl MediaView {
         let mut icons = String::new();
 
         if *MUTE.read() == true {
-            icons += &crate::term::goto_xy_u(xpos+xsize-2, ypos+lines);
+            icons += &crate::term::goto_xy_u(xpos + xsize - 2, ypos + lines);
             icons += mute_char;
         } else {
             // Clear the mute symbol, or it doesn't go away
-            icons += &crate::term::goto_xy_u(xpos+xsize-2, ypos+lines);
+            icons += &crate::term::goto_xy_u(xpos + xsize - 2, ypos + lines);
             icons += "  ";
         }
 
         if *AUTOPLAY.read() == true {
-            icons += &crate::term::goto_xy_u(xpos+xsize-4, ypos+lines);
+            icons += &crate::term::goto_xy_u(xpos + xsize - 4, ypos + lines);
             icons += play_char;
         } else {
-            icons += &crate::term::goto_xy_u(xpos+xsize-4, ypos+lines);
+            icons += &crate::term::goto_xy_u(xpos + xsize - 4, ypos + lines);
             icons += pause_char;
         }
 
@@ -371,9 +380,8 @@ impl MediaView {
     }
 
     pub fn format_secs(&self, secs: usize) -> String {
-        let hours = if secs >= 60*60 { (secs / 60) / 60 } else { 0 };
-        let mins = if secs >= 60 { (secs / 60) %60 } else { 0 };
-
+        let hours = if secs >= 60 * 60 { (secs / 60) / 60 } else { 0 };
+        let mins = if secs >= 60 { (secs / 60) % 60 } else { 0 };
 
         format!("{:02}:{:02}:{:02}", hours, mins, secs % 60)
     }
@@ -391,7 +399,7 @@ impl MediaView {
             self.paused = false;
             self.play()?;
 
-            return Ok(())
+            return Ok(());
         }
         if self.paused {
             self.toggle_autoplay();
@@ -442,12 +450,10 @@ impl MediaView {
     pub fn kill(&mut self) -> HResult<()> {
         let proc = self.process.clone();
         std::thread::spawn(move || -> HResult<()> {
-            proc.lock()
-                .as_mut()
-                .map(|p| {
-                    p.kill().map_err(|e| HError::from(e)).log();
-                    p.wait().map_err(|e| HError::from(e)).log();
-                });
+            proc.lock().as_mut().map(|p| {
+                p.kill().map_err(|e| HError::from(e)).log();
+                p.wait().map_err(|e| HError::from(e)).log();
+            });
             Ok(())
         });
         Ok(())
@@ -464,8 +470,9 @@ impl Widget for MediaView {
     }
 
     fn set_coordinates(&mut self, coordinates: &Coordinates) -> HResult<()> {
-        if &self.core.coordinates == coordinates { return Ok(()); }
-
+        if &self.core.coordinates == coordinates {
+            return Ok(());
+        }
 
         self.core.coordinates = coordinates.clone();
 
@@ -477,12 +484,14 @@ impl Widget for MediaView {
         let (xpix, ypix) = self.core.coordinates.size_pixels()?;
         let cell_ratio = crate::term::cell_ratio()?;
 
-        let xystring = format!("xy\n{}\n{}\n{}\n{}\n{}\n",
-                               xsize+1,
-                               ysize-1,
-                               xpix,
-                               ypix,
-                               cell_ratio);
+        let xystring = format!(
+            "xy\n{}\n{}\n{}\n{}\n{}\n",
+            xsize + 1,
+            ysize - 1,
+            xpix,
+            ypix,
+            cell_ratio
+        );
 
         self.controller.send(xystring)?;
 
@@ -500,16 +509,14 @@ impl Widget for MediaView {
         let progress_str = self.progress_string()?;
         let progress_bar = self.progress_bar()?;
 
-        let frame = self.imgview
-                       .lock()
-                       .get_drawlist();
+        let frame = self.imgview.lock().get_drawlist();
 
         let mut frame = frame?;
 
-        frame += &crate::term::goto_xy_u(xpos, ypos+height);
+        frame += &crate::term::goto_xy_u(xpos, ypos + height);
         frame += &progress_str;
         frame += &self.get_icons(height)?;
-        frame += &crate::term::goto_xy_u(xpos, ypos+height+1);
+        frame += &crate::term::goto_xy_u(xpos, ypos + height + 1);
         frame += &progress_bar;
 
         Ok(frame)
@@ -528,7 +535,6 @@ impl Drop for MediaView {
         self.core.clear().log();
     }
 }
-
 
 use crate::keybind::*;
 

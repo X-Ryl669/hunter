@@ -1,14 +1,14 @@
-use strum_macros::{EnumString, EnumIter};
-use termion::event::Key;
 use ini::Ini;
 use strum::IntoEnumIterator;
+use strum_macros::{EnumIter, EnumString};
+use termion::event::Key;
 
 use std::collections::HashMap;
 use std::default::Default;
+use std::fmt::{Debug, Display};
 use std::str::FromStr;
-use std::fmt::{Display, Debug};
 
-use crate::fail::{HError, HResult, KeyBindError, ErrorLog};
+use crate::fail::{ErrorLog, HError, HResult, KeyBindError};
 use crate::widget::Widget;
 
 use std::string::ToString;
@@ -16,19 +16,15 @@ use strum_macros::Display;
 
 pub type KbResult<T> = Result<T, KeyBindError>;
 
-
 #[derive(Clone, Debug)]
 pub struct Bindings<T>(HashMap<AnyKey, T>);
 
 impl<T> Bindings<T> {
-    pub fn get(&self,
-               key: impl Into<AnyKey>) -> Option<&T> {
+    pub fn get(&self, key: impl Into<AnyKey>) -> Option<&T> {
         self.0.get(&key.into())
     }
 
-    pub fn insert(&mut self,
-                  key: impl Into<AnyKey>,
-                  value: T) -> Option<T> {
+    pub fn insert(&mut self, key: impl Into<AnyKey>, value: T) -> Option<T> {
         self.0.insert(key.into(), value)
     }
 
@@ -36,9 +32,6 @@ impl<T> Bindings<T> {
         Bindings(HashMap::new())
     }
 }
-
-
-
 
 pub trait Acting
 where
@@ -59,24 +52,20 @@ where
         let gkey = AnyKey::from(key);
 
         // Moving takes priority
-        if let Some(movement) = self.get_core()?
-            .config()
-            .keybinds
-            .movement
-            .get(gkey) {
-                match self.movement(movement) {
-                    Ok(()) => return Ok(()),
-                    Err(HError::KeyBind(KeyBindError::MovementUndefined)) => {}
-                    Err(e) => Err(e)?
-                }
+        if let Some(movement) = self.get_core()?.config().keybinds.movement.get(gkey) {
+            match self.movement(movement) {
+                Ok(()) => return Ok(()),
+                Err(HError::KeyBind(KeyBindError::MovementUndefined)) => {}
+                Err(e) => Err(e)?,
             }
+        }
 
         self.search_in();
 
         let bindings = self.search_in();
 
         if let Some(action) = bindings.get(key) {
-            return self.do_action(action)
+            return self.do_action(action);
         } else if let Some(any_key) = gkey.any() {
             if let Some(action) = bindings.get(any_key) {
                 let action = action.insert_key_param(key);
@@ -87,7 +76,6 @@ where
         HError::undefined_key(key)
     }
 }
-
 
 #[derive(Clone, Debug)]
 pub struct KeyBinds {
@@ -117,17 +105,15 @@ impl Default for KeyBinds {
             minibuffer: Bindings::default(),
             fold: Bindings::default(),
             log: Bindings::default(),
-            quickaction: Bindings::default()
+            quickaction: Bindings::default(),
         }
     }
 }
 
-
 impl KeyBinds {
     pub fn load() -> HResult<KeyBinds> {
         let bindings_path = crate::paths::bindings_path()?;
-        let ini = Ini::load_from_file_noescape(bindings_path)
-            .map_err(KeyBindError::from)?;
+        let ini = Ini::load_from_file_noescape(bindings_path).map_err(KeyBindError::from)?;
 
         let movement = Movement::load_section(&ini);
         let filebrowser = FileBrowserAction::load_section(&ini);
@@ -152,7 +138,7 @@ impl KeyBinds {
             minibuffer,
             fold,
             log,
-            quickaction
+            quickaction,
         })
     }
 }
@@ -163,13 +149,13 @@ pub enum AnyKey {
     AnyChar,
     AnyF,
     AnyCtrl,
-    AnyAlt
+    AnyAlt,
 }
 
 impl Display for AnyKey {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        use AnyKey::*;
         use termion::event::Key::*;
+        use AnyKey::*;
 
         match self {
             Key(key) => match key {
@@ -177,27 +163,27 @@ impl Display for AnyKey {
                 Alt(ch) => write!(fmt, "M-{}", ch),
                 Ctrl(ch) => write!(fmt, "C-{}", ch),
                 F(n) => write!(fmt, "F{}", n),
-                k @ _ => write!(fmt, "{:?}", k)
-            }
+                k @ _ => write!(fmt, "{:?}", k),
+            },
             AnyChar => write!(fmt, "_"),
             AnyF => write!(fmt, "F_"),
             AnyCtrl => write!(fmt, "C-_"),
-            AnyAlt => write!(fmt, "M-_")
+            AnyAlt => write!(fmt, "M-_"),
         }
     }
 }
 
 impl AnyKey {
     pub fn any(&self) -> Option<AnyKey> {
-        use AnyKey::*;
         use termion::event::Key::*;
+        use AnyKey::*;
 
         match self {
             Key(F(_)) => Some(AnyF),
             Key(Char(_)) => Some(AnyChar),
             Key(Ctrl(_)) => Some(AnyCtrl),
             Key(Alt(_)) => Some(AnyAlt),
-            _ => None
+            _ => None,
         }
     }
 }
@@ -212,41 +198,36 @@ impl FromStr for AnyKey {
     type Err = KeyBindError;
 
     fn from_str(key: &str) -> Result<AnyKey, Self::Err> {
-        use AnyKey::*;
         use termion::event::Key::*;
+        use AnyKey::*;
 
-        let key_err = |key: &str| {
-            KeyBindError::ParseKeyError(key.to_string())
-        };
+        let key_err = |key: &str| KeyBindError::ParseKeyError(key.to_string());
 
-        let predefined = |key| {
-            match key {
-                "Backspace" => Some(Key(Backspace)),
-                "Left" => Some(Key(Left)),
-                "Right" => Some(Key(Right)),
-                "Up" => Some(Key(Up)),
-                "Down" => Some(Key(Down)),
-                "Home" => Some(Key(Home)),
-                "End" => Some(Key(End)),
-                "PageUp" => Some(Key(PageUp)),
-                "PageDown" => Some(Key(PageDown)),
-                "Delete" => Some(Key(Delete)),
-                "Insert" => Some(Key(Insert)),
-                "Tab" => Some(Key(Char('\t'))),
-                "BackTab" => Some(Key(BackTab)),
-                "Enter" => Some(Key(Char('\n'))),
-                "Space" => Some(Key(Char(' '))),
-                "\\_" => Some(Key(Char('_'))),
-                "_" => Some(AnyChar),
-                "Esc" => Some(Key(Esc)),
-                _ => None
-            }
+        let predefined = |key| match key {
+            "Backspace" => Some(Key(Backspace)),
+            "Left" => Some(Key(Left)),
+            "Right" => Some(Key(Right)),
+            "Up" => Some(Key(Up)),
+            "Down" => Some(Key(Down)),
+            "Home" => Some(Key(Home)),
+            "End" => Some(Key(End)),
+            "PageUp" => Some(Key(PageUp)),
+            "PageDown" => Some(Key(PageDown)),
+            "Delete" => Some(Key(Delete)),
+            "Insert" => Some(Key(Insert)),
+            "Tab" => Some(Key(Char('\t'))),
+            "BackTab" => Some(Key(BackTab)),
+            "Enter" => Some(Key(Char('\n'))),
+            "Space" => Some(Key(Char(' '))),
+            "\\_" => Some(Key(Char('_'))),
+            "_" => Some(AnyChar),
+            "Esc" => Some(Key(Esc)),
+            _ => None,
         };
 
         if let Some(key) = predefined(key) {
             return Ok(key);
         }
-
 
         if key.starts_with("F") && key.len() == 2 {
             let chr = key.get(1..2);
@@ -255,13 +236,8 @@ impl FromStr for AnyKey {
                 Ok(AnyF)
             } else {
                 chr.ok_or_else(|| key_err(key))
-                    .and_then(|num|
-                              num
-                              .parse()
-                              .map(|n|
-                                   Key(F(n)))
-                              .map_err(|_| key_err(key)))
-                }
+                    .and_then(|num| num.parse().map(|n| Key(F(n))).map_err(|_| key_err(key)))
+            }
         } else if let Ok(key) = key.parse() {
             Ok(Key(Char(key)))
         } else {
@@ -271,41 +247,40 @@ impl FromStr for AnyKey {
                 // Something is wrong if there are more parts
                 return Err(key_err(key));
             } else {
-                (parts.get(0).and_then(|p| p.parse().ok()),
-                 parts.get(1).and_then(|p| p.parse().ok()))
+                (
+                    parts.get(0).and_then(|p| p.parse().ok()),
+                    parts.get(1).and_then(|p| p.parse().ok()),
+                )
             };
 
             match (modifier, maybe_key) {
                 (Some(ch), None) => match ch {
                     '_' => Ok(AnyChar),
-                    _ => Ok(Key(Char(ch)))
-                }
+                    _ => Ok(Key(Char(ch))),
+                },
                 (Some('C'), Some(ch)) => match ch {
                     '_' => Ok(AnyCtrl),
-                    _ => Ok(Key(Ctrl(ch)))
-                }
+                    _ => Ok(Key(Ctrl(ch))),
+                },
                 (Some('A'), Some(ch)) => match ch {
                     '_' => Ok(AnyAlt),
-                    _ => Ok(Key(Alt(ch)))
-                }
+                    _ => Ok(Key(Alt(ch))),
+                },
                 (Some('M'), Some(ch)) => match ch {
                     '_' => Ok(AnyAlt),
-                    _ => Ok(Key(Alt(ch)))
-                }
-                _ => Err(key_err(key))
+                    _ => Ok(Key(Alt(ch))),
+                },
+                _ => Err(key_err(key)),
             }
         }
     }
 }
 
-
-
-
 #[derive(Copy, Clone, Display, Debug)]
 pub enum CharOrNum {
     Char(char),
     Num(usize),
-    Any
+    Any,
 }
 
 impl CharOrNum {
@@ -314,8 +289,8 @@ impl CharOrNum {
             CharOrNum::Char(ch) => ch,
             CharOrNum::Any => default,
             _ => {
-                KeyBindError::CharOrNumWrongType(String::from("char"),
-                                                 String::from("number")).log();
+                KeyBindError::CharOrNumWrongType(String::from("char"), String::from("number"))
+                    .log();
                 default
             }
         }
@@ -326,8 +301,8 @@ impl CharOrNum {
             CharOrNum::Num(num) => num,
             CharOrNum::Any => default,
             _ => {
-                KeyBindError::CharOrNumWrongType(String::from("number"),
-                                                 String::from("char")).log();
+                KeyBindError::CharOrNumWrongType(String::from("number"), String::from("char"))
+                    .log();
                 default
             }
         }
@@ -338,11 +313,10 @@ impl FromStr for CharOrNum {
     type Err = KeyBindError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let s = s.trim_start_matches("(")
-            .trim_end_matches(")");
+        let s = s.trim_start_matches("(").trim_end_matches(")");
 
         if s == "_" {
-            return Ok(Self::Any)
+            return Ok(Self::Any);
         }
 
         if let Ok(num) = s.parse() {
@@ -355,35 +329,32 @@ impl FromStr for CharOrNum {
     }
 }
 
-
-
-
 pub trait BindingSection
 where
     Self: FromStr + Copy + Display + Debug,
-    Bindings<Self>: Default
+    Bindings<Self>: Default,
 {
     fn section() -> &'static str;
 
     fn process_action_str(action_str: &str) -> (&str, Option<CharOrNum>) {
         // Could be something like Up(10) for going up 10 times
-        action_str.rfind("(")
+        action_str
+            .rfind("(")
             .map(|split_pos| {
                 let split = action_str.split_at(split_pos);
                 let action = split.0;
-                let param = split.1
-                    .trim_start_matches("(")
-                    .trim_end_matches(")");
+                let param = split.1.trim_start_matches("(").trim_end_matches(")");
                 (action, param.parse().log_and().ok())
-            }).unwrap_or((action_str, None))
-
+            })
+            .unwrap_or((action_str, None))
     }
 
     // statically inserts hardcoded stuff from config like "Up(10)" into action
     fn insert_config_param(self, param: CharOrNum) -> Self {
-        let msg = format!("Warning: Unsupported config parameter {:?} for {}",
-                          param,
-                          self);
+        let msg = format!(
+            "Warning: Unsupported config parameter {:?} for {}",
+            param, self
+        );
         HError::log::<()>(&msg).ok();
         self
     }
@@ -401,7 +372,7 @@ where
     fn parse_section(ini: &Ini) -> HResult<Option<Bindings<Self>>> {
         let section = match ini.section(Some(Self::section())) {
             Some(x) => x,
-            None => return Ok(None)
+            None => return Ok(None),
         };
 
         let mut bindings = Bindings::new();
@@ -412,26 +383,33 @@ where
             let action = Self::from_str(action_str)
                 .map_err(|_| KeyBindError::WrongAction(action_str.to_string()))
                 .map_err(HError::from)
-                .map(|act|
-                     if let Some(cp) = config_param {
-                         act.insert_config_param(cp)
-                     } else {
-                         // default() values on e.g. usize are often useless for actions
-                         act.as_default()
-                     });
+                .map(|act| {
+                    if let Some(cp) = config_param {
+                        act.insert_config_param(cp)
+                    } else {
+                        // default() values on e.g. usize are often useless for actions
+                        act.as_default()
+                    }
+                });
 
             // If action isn't valid log it and try next binding
-            if action.is_err() { action.log(); continue; }
+            if action.is_err() {
+                action.log();
+                continue;
+            }
 
             for key_str in keys_str.split(",") {
                 let key_str = key_str.trim();
 
-                let key = key_str.parse::<AnyKey>()
-                    .map_err(|_| KeyBindError::WrongKey(action_str.to_string(),
-                                                        key_str.to_string()));
+                let key = key_str.parse::<AnyKey>().map_err(|_| {
+                    KeyBindError::WrongKey(action_str.to_string(), key_str.to_string())
+                });
 
                 // If key isn't valid log it and try next binding
-                if key.is_err() { key.log(); continue; }
+                if key.is_err() {
+                    key.log();
+                    continue;
+                }
 
                 bindings.insert(key?, action.clone()?);
             }
@@ -443,17 +421,10 @@ where
     fn load_section(ini: &Ini) -> Bindings<Self> {
         match Self::parse_section(ini).log_and() {
             Ok(Some(section)) => section,
-            _ => Bindings::default()
+            _ => Bindings::default(),
         }
     }
 }
-
-
-
-
-
-
-
 
 #[derive(EnumString, EnumIter, Copy, Clone, Display, Debug)]
 pub enum Movement {
@@ -466,8 +437,6 @@ pub enum Movement {
     PageUp,
     PageDown,
 }
-
-
 
 #[derive(EnumString, EnumIter, Copy, Clone, Display, Debug)]
 pub enum FileBrowserAction {
@@ -489,10 +458,8 @@ pub enum FileBrowserAction {
     RunSubshell,
     ToggleColumns,
     ZoomPreview,
-    ExecCmd
+    ExecCmd,
 }
-
-
 
 #[derive(EnumString, EnumIter, Copy, Clone, Display, Debug)]
 pub enum FileListAction {
@@ -513,8 +480,6 @@ pub enum FileListAction {
     ToggleDirsFirst,
 }
 
-
-
 #[derive(EnumString, EnumIter, Copy, Clone, Display, Debug)]
 pub enum TabAction {
     NewTab,
@@ -524,8 +489,6 @@ pub enum TabAction {
     GotoTab(usize),
 }
 
-
-
 #[derive(EnumString, EnumIter, Copy, Clone, Display, Debug)]
 pub enum MediaAction {
     TogglePause,
@@ -534,16 +497,12 @@ pub enum MediaAction {
     SeekBackward,
 }
 
-
-
 #[derive(EnumString, EnumIter, Copy, Clone, Display, Debug)]
 pub enum BookmarkAction {
     GotoLastCwd,
     Goto(char),
-    Delete(char)
+    Delete(char),
 }
-
-
 
 #[derive(EnumString, EnumIter, Copy, Clone, Display, Debug)]
 pub enum ProcessAction {
@@ -556,10 +515,8 @@ pub enum ProcessAction {
     ScrollOutputPageDown,
     ScrollOutputPageUp,
     ScrollOutputBottom,
-    ScrollOutputTop
+    ScrollOutputTop,
 }
-
-
 
 #[derive(EnumString, EnumIter, Copy, Clone, Display, Debug)]
 pub enum MiniBufferAction {
@@ -577,29 +534,24 @@ pub enum MiniBufferAction {
     ClearLine,
     DeleteWord,
     CursorToStart,
-    CursorToEnd
+    CursorToEnd,
 }
 
 #[derive(EnumString, EnumIter, Copy, Clone, Display, Debug)]
 pub enum FoldAction {
-    ToggleFold
+    ToggleFold,
 }
 
 #[derive(EnumString, EnumIter, Copy, Clone, Display, Debug)]
 pub enum LogAction {
-    Close
+    Close,
 }
 
 #[derive(EnumString, EnumIter, Copy, Clone, Display, Debug)]
 pub enum QuickActionAction {
     Close,
-    SelectOrRun(char)
+    SelectOrRun(char),
 }
-
-
-
-
-
 
 impl BindingSection for Movement {
     fn section() -> &'static str {
@@ -614,7 +566,7 @@ impl BindingSection for Movement {
         match self {
             Up(_) => Up(n),
             Down(_) => Down(n),
-            _ => self
+            _ => self,
         }
     }
 
@@ -624,13 +576,10 @@ impl BindingSection for Movement {
         match self {
             Up(_) => Up(1),
             Down(_) => Down(1),
-            _ => self
+            _ => self,
         }
     }
-
-
 }
-
 
 impl Default for Bindings<Movement> {
     fn default() -> Self {
@@ -662,16 +611,14 @@ impl Default for Bindings<Movement> {
         movement.insert(Key::Ctrl('v'), Movement::PageDown);
         movement.insert(Key::Ctrl('V'), Movement::PageUp);
 
-
         movement
     }
 }
 
-
 impl Default for Bindings<FileBrowserAction> {
     fn default() -> Self {
-        use Key::*;
         use FileBrowserAction::*;
+        use Key::*;
 
         let mut filebrowser = Bindings::new();
 
@@ -695,7 +642,7 @@ impl Default for Bindings<FileBrowserAction> {
                 RunSubshell => Char('z'),
                 ToggleColumns => Char('c'),
                 ZoomPreview => Char('C'),
-                ExecCmd => Char('!')
+                ExecCmd => Char('!'),
             };
 
             filebrowser.insert(key, action.as_default());
@@ -713,8 +660,8 @@ impl BindingSection for FileBrowserAction {
 
 impl Default for Bindings<FileListAction> {
     fn default() -> Self {
-        use Key::*;
         use FileListAction::*;
+        use Key::*;
 
         let mut filelist = Bindings::new();
 
@@ -734,7 +681,7 @@ impl Default for Bindings<FileListAction> {
                 CycleSort => Char('s'),
                 ToNextMtime => Char('K'),
                 ToPrevMtime => Char('k'),
-                ToggleDirsFirst => Char('d')
+                ToggleDirsFirst => Char('d'),
             };
 
             filelist.insert(key, action.as_default());
@@ -763,7 +710,7 @@ impl Default for Bindings<TabAction> {
                 NextTab => Char('\t').into(),
                 PrevTab => BackTab.into(),
                 CloseTab => Ctrl('w').into(),
-                GotoTab(_) => AnyKey::AnyF
+                GotoTab(_) => AnyKey::AnyF,
             };
 
             tab.insert(key, action.as_default());
@@ -785,14 +732,14 @@ impl BindingSection for TabAction {
 
         match self {
             GotoTab(_) => GotoTab(n),
-            _ => self
+            _ => self,
         }
     }
 
     fn insert_key_param(self, key: Key) -> Self {
         match (self, key) {
             (TabAction::GotoTab(_), Key::F(n)) => TabAction::GotoTab(n as usize - 1),
-            _ => self
+            _ => self,
         }
     }
 }
@@ -809,7 +756,7 @@ impl Default for Bindings<MediaAction> {
                 TogglePause => Alt('m'),
                 ToggleMute => Alt('M'),
                 SeekForward => Alt('>'),
-                SeekBackward => Alt('<')
+                SeekBackward => Alt('<'),
             };
 
             media.insert(key, action.as_default());
@@ -827,8 +774,8 @@ impl BindingSection for MediaAction {
 
 impl Default for Bindings<BookmarkAction> {
     fn default() -> Self {
-        use Key::*;
         use BookmarkAction::*;
+        use Key::*;
 
         let mut bookmark = Bindings::new();
 
@@ -836,13 +783,11 @@ impl Default for Bindings<BookmarkAction> {
             let key = match action {
                 GotoLastCwd => Char('`').into(),
                 Goto(_) => AnyKey::AnyChar,
-                BookmarkAction::Delete(_) => AnyKey::AnyAlt
+                BookmarkAction::Delete(_) => AnyKey::AnyAlt,
             };
 
             bookmark.insert(key, action.as_default());
         }
-
-
 
         bookmark
     }
@@ -853,7 +798,6 @@ impl BindingSection for BookmarkAction {
         "bookmarks"
     }
 
-
     fn insert_config_param(self, param: CharOrNum) -> Self {
         use BookmarkAction::*;
 
@@ -861,7 +805,7 @@ impl BindingSection for BookmarkAction {
 
         match self {
             Goto(_) => Goto(ch),
-            _ => self
+            _ => self,
         }
     }
 
@@ -871,11 +815,10 @@ impl BindingSection for BookmarkAction {
         match (self, key) {
             (Goto(_), Key::Char(ch)) => Goto(ch),
             (Delete(_), Key::Char(ch)) => Delete(ch),
-            _ => self
+            _ => self,
         }
     }
 }
-
 
 impl Default for Bindings<ProcessAction> {
     fn default() -> Self {
@@ -895,7 +838,7 @@ impl Default for Bindings<ProcessAction> {
                 ScrollOutputPageDown => Ctrl('v'),
                 ScrollOutputPageUp => Ctrl('V'),
                 ScrollOutputBottom => Char('>'),
-                ScrollOutputTop => Ctrl('<')
+                ScrollOutputTop => Ctrl('<'),
             };
 
             process.insert(key, action.as_default());
@@ -910,7 +853,6 @@ impl BindingSection for ProcessAction {
         "processes"
     }
 }
-
 
 impl Default for Bindings<MiniBufferAction> {
     fn default() -> Self {
@@ -936,8 +878,8 @@ impl Default for Bindings<MiniBufferAction> {
                 ClearLine => Ctrl('u').into(),
                 DeleteWord => Ctrl('h').into(),
                 CursorToStart => Ctrl('a').into(),
-                CursorToEnd => Ctrl('e').into()
-        };
+                CursorToEnd => Ctrl('e').into(),
+            };
 
             minibuffer.insert(key, action.as_default());
         }
@@ -967,36 +909,33 @@ impl BindingSection for MiniBufferAction {
 
         match self {
             InsertChar(_) => InsertChar(ch),
-            _ => self
+            _ => self,
         }
     }
 
     fn insert_key_param(self, key: Key) -> Self {
-        use MiniBufferAction::*;
         use Key::*;
+        use MiniBufferAction::*;
 
         match (self, key) {
             (InsertChar(_), Char(ch)) => InsertChar(ch),
             (InsertTab(_), F(n)) => InsertTab(n as usize),
-            _ => self
+            _ => self,
         }
     }
 }
 
-
-
-
 impl Default for Bindings<FoldAction> {
     fn default() -> Self {
-        use Key::*;
         use FoldAction::*;
+        use Key::*;
 
         let mut fold = Bindings::new();
 
         for action in FoldAction::iter() {
             let key = match action {
-                ToggleFold => Char('t')
-        };
+                ToggleFold => Char('t'),
+            };
 
             fold.insert(key, action.as_default());
         }
@@ -1020,7 +959,7 @@ impl Default for Bindings<LogAction> {
 
         for action in LogAction::iter() {
             let key = match action {
-                Close => Char('l')
+                Close => Char('l'),
             };
 
             log.insert(key, action.as_default());
@@ -1038,8 +977,8 @@ impl BindingSection for LogAction {
 
 impl Default for Bindings<QuickActionAction> {
     fn default() -> Self {
-        use AnyKey::*;
         use termion::event::Key::*;
+        use AnyKey::*;
         use QuickActionAction::*;
 
         let mut quickaction = Bindings::new();
@@ -1047,7 +986,7 @@ impl Default for Bindings<QuickActionAction> {
         for action in QuickActionAction::iter() {
             let key = match action {
                 Close => Key(Char('a')),
-                SelectOrRun(_) => AnyChar
+                SelectOrRun(_) => AnyChar,
             };
 
             quickaction.insert(key, action.as_default());
@@ -1073,23 +1012,22 @@ impl BindingSection for QuickActionAction {
 
         match self {
             SelectOrRun(_) => SelectOrRun(ch),
-            _ => self
+            _ => self,
         }
     }
 
     fn insert_key_param(self, key: Key) -> Self {
-        use QuickActionAction::*;
         use Key::*;
+        use QuickActionAction::*;
 
         match (self, key) {
             (SelectOrRun(_), Char(ch)) => SelectOrRun(ch),
             (SelectOrRun(_), Ctrl(ch)) => SelectOrRun(ch),
             (SelectOrRun(_), Alt(ch)) => SelectOrRun(ch),
-            _ => self
+            _ => self,
         }
     }
 }
-
 
 #[test]
 fn test_keyparse() {
