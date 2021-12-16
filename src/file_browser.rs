@@ -989,7 +989,7 @@ impl FileBrowser {
         );
 
         let mut file = std::fs::File::create(filepath)?;
-        file.write(output.as_bytes())?;
+        file.write_all(output.as_bytes())?;
         HError::quit()
     }
 

@@ -220,7 +220,10 @@ impl RefreshPackage {
             match event {
                 Create(mut file) => {
                     let job = file.prepare_meta_job(cache);
-                    job.map(|j| jobs.push(j));
+                    if let Some(j) = job {
+                        jobs.push(j) 
+                    }
+
                     new_files.push(file);
                 }
                 Change(file) => {
@@ -238,7 +241,7 @@ impl RefreshPackage {
                     }
                 }
                 Remove(file) => {
-                    if let Some(_) = file_pos_map.get(&file) {
+                    if file_pos_map.get(&file).is_some() {
                         deleted_files.insert(file);
                     }
                 }
@@ -254,7 +257,7 @@ impl RefreshPackage {
             };
         }
 
-        if deleted_files.len() > 0 {
+        if !deleted_files.is_empty() {
             files.files.retain(|file| !deleted_files.contains(file));
         }
 
@@ -493,7 +496,7 @@ pub fn from_getdents(
 
                     // Add length of current dirent to the current offset
                     // tbuffer[n] -> buffer[n + len(buffer[n])
-                    bpos = bpos + d.d_reclen as usize;
+                    bpos += d.d_reclen as usize;
 
                     let name: &OsStr = {
                         // Safe as long as d_name is NULL terminated
@@ -504,7 +507,7 @@ pub fn from_getdents(
                         };
 
                         // Don't want this
-                        if bytes.len() == 0 || bytes == b"." || bytes == b".." {
+                        if bytes.is_empty() || bytes == b"." || bytes == b".." {
                             continue;
                         }
 
@@ -562,7 +565,7 @@ pub fn from_getdents(
 
                     let name = name
                         .to_str()
-                        .map(|n| String::from(n))
+                        .map(String::from)
                         .unwrap_or_else(|| name.to_string_lossy().to_string());
 
                     let hidden = name.as_bytes()[0] == b'.';
@@ -609,8 +612,8 @@ impl Files {
 
         let nonhidden = AtomicUsize::default();
 
-        let dir = Dir::open(path.clone(), OFlag::O_DIRECTORY, Mode::empty())
-            .map_err(|e| FileError::OpenDir(e))?;
+        let dir = Dir::open(path, OFlag::O_DIRECTORY, Mode::empty())
+            .map_err(FileError::OpenDir)?;
 
         let direntries = from_getdents(dir.as_raw_fd(), path, &nonhidden)?;
 
@@ -619,7 +622,7 @@ impl Files {
         }
 
         let mut files = Files::default();
-        files.directory = File::new_from_path(&path)?;
+        files.directory = File::new_from_path(path)?;
 
         files.files = direntries;
         files.len = nonhidden.load(Ordering::Relaxed);
@@ -691,7 +694,7 @@ impl Files {
         let jobs = std::mem::take(&mut self.jobs);
         let stale = self.stale.clone().unwrap_or_else(Stale::new);
 
-        if jobs.len() == 0 {
+        if jobs.is_empty() {
             return;
         }
 
@@ -713,7 +716,7 @@ impl Files {
                         if let Some(dirsize) = dirsize {
                             let size = Dir::open(&path, OFlag::O_DIRECTORY, Mode::empty())
                                 .map(|mut d| d.iter().count())
-                                .map_err(|e| FileError::OpenDir(e))
+                                .map_err(FileError::OpenDir)
                                 .log_and()
                                 .unwrap_or(0);
 
@@ -808,7 +811,7 @@ impl Files {
             f.kind == Kind::Placeholder
                 || !(filter.is_some() && !f.name.contains(filter.as_ref().unwrap()))
                     && (!filter_selected || f.selected)
-                    && !(!show_hidden && f.name.starts_with("."))
+                    && !(!show_hidden && f.name.starts_with('.'))
         }
     }
 
@@ -816,8 +819,7 @@ impl Files {
     pub fn sorter(&self) -> impl Fn(&File, &File) -> std::cmp::Ordering {
         use std::cmp::Ordering::*;
 
-        let dirs_first = self.dirs_first.clone();
-        let sort = self.sort.clone();
+        let dirs_first = self.dirs_first;
 
         let dircmp = move |a: &File, b: &File| match (a.is_dir(), b.is_dir()) {
             (true, false) if dirs_first => Less,
@@ -875,6 +877,8 @@ impl Files {
             }
         };
 
+        let sort = self.sort;
+
         move |a, b| match sort {
             SortBy::Name => match dircmp(a, b) {
                 Equal => namecmp(a, b),
@@ -913,7 +917,7 @@ impl Files {
         self.show_hidden = !self.show_hidden;
         self.set_dirty();
 
-        if self.show_hidden == true && self.len() > 1 {
+        if self.show_hidden && self.len() > 1 {
             self.remove_placeholder();
 
             // Need to recheck hidden files
@@ -925,17 +929,16 @@ impl Files {
 
     fn remove_placeholder(&mut self) {
         let dirpath = self.directory.path.clone();
-        self.find_file_with_path(&dirpath)
-            .cloned()
-            .map(|placeholder| {
-                if let Some(item_index) = self.files.iter().position(|f| f == &placeholder) {
-                    self.files.remove(item_index);
+        
+        if let Some(placeholder) = self.find_file_with_path(&dirpath).cloned() {
+            if let Some(item_index) = self.files.iter().position(|f| f == &placeholder) {
+                self.files.remove(item_index);
 
-                    if self.len > 0 {
-                        self.len -= 1;
-                    }
+                if self.len > 0 {
+                    self.len -= 1;
                 }
-            });
+            }
+        };
     }
 
     pub fn ready_to_refresh(&self) -> HResult<bool> {
@@ -968,7 +971,7 @@ impl Files {
             }
         }
 
-        return Ok(None);
+        Ok(None)
     }
 
     pub fn process_fs_events(&mut self, sender: Sender<Events>) -> HResult<()> {
@@ -1090,11 +1093,7 @@ pub enum SortBy {
 
 impl PartialEq for File {
     fn eq(&self, other: &File) -> bool {
-        if self.path == other.path {
-            true
-        } else {
-            false
-        }
+        self.path == other.path
     }
 }
 
@@ -1134,7 +1133,7 @@ pub struct File {
 
 impl File {
     pub fn new(name: &str, path: PathBuf) -> File {
-        let hidden = name.starts_with(".");
+        let hidden = name.starts_with('.');
 
         File {
             name: name.to_string(),
@@ -1178,7 +1177,7 @@ impl File {
 
         let name = name
             .to_str()
-            .map(|n| String::from(n))
+            .map(String::from)
             .unwrap_or_else(|| name.to_string_lossy().to_string());
 
         let hidden = name.as_bytes()[0] == b'.';
@@ -1218,7 +1217,7 @@ impl File {
         let name = path
             .file_name()
             .map(|name| name.to_string_lossy().to_string())
-            .unwrap_or("/".to_string());
+            .unwrap_or_else(|| "/".to_string());
 
         Ok(File::new(&name, pathbuf))
     }
@@ -1252,7 +1251,7 @@ impl File {
 
     pub fn refresh_meta_job(&mut self) -> Job {
         let meta = self.meta.as_ref().map_or_else(
-            || Arc::default(),
+            Arc::default,
             |m| {
                 *m.write().unwrap() = None;
                 m.clone()
@@ -1304,12 +1303,12 @@ impl File {
     pub fn get_color(&self) -> Option<String> {
         let meta = self.meta()?;
         let meta = meta.as_ref()?;
-        match COLORS.style_for_path_with_metadata(&self.path, Some(&meta)) {
+        match COLORS.style_for_path_with_metadata(&self.path, Some(meta)) {
             // TODO: Also handle bg color, bold, etc.?
             Some(style) => style
                 .foreground
                 .as_ref()
-                .map(|c| crate::term::from_lscolor(&c)),
+                .map(|c| crate::term::from_lscolor(c)),
             None => None,
         }
     }
@@ -1319,10 +1318,10 @@ impl File {
             let size = match self.dirsize {
                 Some(ref dirsize) => {
                     let (ref ready, ref size) = **dirsize;
-                    if ready.load(Ordering::Relaxed) == true {
+                    if ready.load(Ordering::Relaxed) {
                         (size.load(Ordering::Relaxed), "")
                     } else {
-                        return Err(FileError::MetaPending)?;
+                        return Err(FileError::MetaPending.into());
                     }
                 }
                 None => (0, ""),
@@ -1334,7 +1333,7 @@ impl File {
         let mut unit = 0;
         let mut size = match self.meta() {
             Some(meta) => meta.as_ref().unwrap().size(),
-            None => return Err(FileError::MetaPending)?,
+            None => return Err(FileError::MetaPending.into()),
         };
         while size > 1024 {
             size /= 1024;
@@ -1363,9 +1362,8 @@ impl File {
         use std::panic;
 
         if let Some(ext) = self.path.extension() {
-            let mime = mime_guess::from_ext(&ext.to_string_lossy()).first();
-            if mime.is_some() {
-                return Ok(mime.unwrap());
+            if let Some(mime) = mime_guess::from_ext(&ext.to_string_lossy()).first() {
+                return Ok(mime);
             }
         }
 
@@ -1416,7 +1414,7 @@ impl File {
             None => return Ok(None),
         };
 
-        File::new_from_path(&pathbuf).map(|p| Some(p))
+        File::new_from_path(pathbuf).map(Some)
     }
 
     pub fn grand_parent(&self) -> Option<PathBuf> {
@@ -1429,7 +1427,7 @@ impl File {
             None => return Ok(None),
         };
 
-        File::new_from_path(&pathbuf).map(|p| Some(p))
+        File::new_from_path(&pathbuf).map(Some)
     }
 
     pub fn is_dir(&self) -> bool {
@@ -1515,11 +1513,8 @@ impl File {
                     };
                 }
                 false => {
-                    match tags.1.binary_search(&path) {
-                        Ok(delpos) => {
-                            tags.1.remove(delpos);
-                        }
-                        Err(_) => {}
+                    if let Ok(delpos) = tags.1.binary_search(&path) {
+                        tags.1.remove(delpos);
                     };
                 }
             }
@@ -1623,7 +1618,7 @@ impl File {
                 5 => format!("{}{}{}", r, n, x),
                 6 => format!("{}{}{}", r, w, n),
                 7 => format!("{}{}{}", r, w, x),
-                _ => format!("---"),
+                _ => "---".to_owned(),
             })
             .collect();
 
