@@ -187,7 +187,7 @@ impl MediaView {
                     std::thread::spawn(move || -> HResult<()> {
                         for cmd in rx_cmd.lock().iter() {
                             write!(stdin, "{}", cmd)?;
-                            write!(stdin, "\n")?;
+                            writeln!(stdin)?;
                             stdin.flush()?;
                         }
                         Ok(())
@@ -207,7 +207,7 @@ impl MediaView {
                                 break;
                             } else {
                                 let msg = String::from("hunter-media failed!");
-                                return Err(failure::format_err!("{}", msg))?;
+                                return Err(failure::format_err!("{}", msg).into());
                             }
                         }
 
@@ -246,7 +246,7 @@ impl MediaView {
                             imgview.set_image_data(frame);
                             sender
                                 .send(crate::widget::Events::WidgetReady)
-                                .map_err(|e| HError::from(e))
+                                .map_err(HError::from)
                                 .log();
 
                             line_buf.clear();
@@ -262,17 +262,17 @@ impl MediaView {
         );
 
         Ok(MediaView {
-            core: core.clone(),
-            imgview: imgview,
+            core,
+            imgview,
             file: file.to_path_buf(),
-            media_type: media_type,
+            media_type,
             controller: tx_cmd,
             paused: false,
             height: Arc::new(Mutex::new(0)),
             position: Arc::new(Mutex::new(0)),
             duration: Arc::new(Mutex::new(0)),
-            stale: stale,
-            process: process,
+            stale,
+            process,
             preview_runner: Some(run_preview),
         })
     }
@@ -300,7 +300,9 @@ impl MediaView {
             if !stale.is_stale()? {
                 print!("{}", clear);
 
-                runner.map(|runner| runner(autoplay, mute, height, position, duration).log());
+                if let Some(runner) = runner {
+                     runner(autoplay, mute, height, position, duration).log();
+                }
             }
             Ok(())
         });
@@ -319,14 +321,14 @@ impl MediaView {
     pub fn progress_bar(&self) -> HResult<String> {
         let xsize = self.core.coordinates.xsize_u();
 
-        let position = self.position.lock().clone();
-        let duration = self.duration.lock().clone();
+        let position = *self.position.lock();
+        let duration = *self.duration.lock();
 
         if duration == 0 || position == 0 {
             Ok(format!("{:elements$}", "|", elements = xsize))
         } else {
-            let element_percent = 100 as f32 / xsize as f32;
-            let progress_percent = position as f32 / duration as f32 * 100 as f32;
+            let element_percent = 100_f32 / xsize as f32;
+            let progress_percent = position as f32 / duration as f32 * 100_f32;
             let element_count = progress_percent as f32 / element_percent as f32;
 
             Ok(format!(
@@ -340,8 +342,8 @@ impl MediaView {
     }
 
     pub fn progress_string(&self) -> HResult<String> {
-        let position = self.position.lock().clone();
-        let duration = self.duration.lock().clone();
+        let position = *self.position.lock();
+        let duration = *self.duration.lock();
 
         let fposition = self.format_secs(position);
         let fduration = self.format_secs(duration);
@@ -359,7 +361,7 @@ impl MediaView {
 
         let mut icons = String::new();
 
-        if *MUTE.read() == true {
+        if *MUTE.read() {
             icons += &crate::term::goto_xy_u(xpos + xsize - 2, ypos + lines);
             icons += mute_char;
         } else {
@@ -368,7 +370,7 @@ impl MediaView {
             icons += "  ";
         }
 
-        if *AUTOPLAY.read() == true {
+        if *AUTOPLAY.read() {
             icons += &crate::term::goto_xy_u(xpos + xsize - 4, ypos + lines);
             icons += play_char;
         } else {
@@ -387,12 +389,12 @@ impl MediaView {
     }
 
     pub fn toggle_pause(&mut self) -> HResult<()> {
-        let auto = AUTOPLAY.read().clone();
-        let pos = self.position.lock().clone();
+        let auto = *AUTOPLAY.read();
+        let pos = *self.position.lock();
 
         // This combination means only first frame was shown, since
         // self.paused will be false, even with autoplay off
-        if pos == 0 && auto == false && self.paused == false {
+        if pos == 0 && !auto && !self.paused {
             self.toggle_autoplay();
 
             self.start_video()?;
@@ -450,10 +452,11 @@ impl MediaView {
     pub fn kill(&mut self) -> HResult<()> {
         let proc = self.process.clone();
         std::thread::spawn(move || -> HResult<()> {
-            proc.lock().as_mut().map(|p| {
-                p.kill().map_err(|e| HError::from(e)).log();
-                p.wait().map_err(|e| HError::from(e)).log();
-            });
+            if let Some(p) = proc.lock().as_mut() {
+                p.kill().map_err(HError::from).log();
+                p.wait().map_err(HError::from).log();
+            }
+
             Ok(())
         });
         Ok(())
@@ -478,7 +481,7 @@ impl Widget for MediaView {
 
         let mut imgview = self.imgview.lock();
         imgview.set_image_data(vec![]);
-        imgview.set_coordinates(&coordinates)?;
+        imgview.set_coordinates(coordinates)?;
 
         let (xsize, ysize) = self.core.coordinates.size_u();
         let (xpix, ypix) = self.core.coordinates.size_pixels()?;

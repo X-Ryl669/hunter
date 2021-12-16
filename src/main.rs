@@ -74,7 +74,7 @@ fn main() -> HResult<()> {
         Err(err) => {
             reset_screen(&mut core)?;
             eprintln!("{:?}\n{:?}", err, err.cause());
-            return Err(err);
+            Err(err)
         }
     }
 }

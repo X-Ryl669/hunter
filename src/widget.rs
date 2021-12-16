@@ -77,12 +77,12 @@ impl WidgetCore {
         config.run().log();
 
         let core = WidgetCore {
-            screen: screen,
+            screen,
             coordinates: coords,
             minibuffer: Arc::new(Mutex::new(None)),
             event_sender: Arc::new(Mutex::new(sender)),
             event_receiver: Arc::new(Mutex::new(Some(receiver))),
-            status_bar_content: status_bar_content,
+            status_bar_content,
             term_size: (xsize, ysize),
             dirty: DirtyBit::new(),
             config: Arc::new(RwLock::new(config)),
@@ -264,23 +264,20 @@ pub trait Widget {
     }
 
     fn on_key(&mut self, key: Key) -> HResult<()> {
-        match key {
-            _ => self.bad(Event::Key(key))?,
-        }
+        // TODO.Nano: What's going on here?
+        self.bad(Event::Key(key))?;
         Ok(())
     }
 
     fn on_mouse(&mut self, event: MouseEvent) -> HResult<()> {
-        match event {
-            _ => self.bad(Event::Mouse(event)).unwrap(),
-        }
+        // TODO.Nano: What's going on here?
+        self.bad(Event::Mouse(event)).unwrap();
         Ok(())
     }
 
     fn on_wtf(&mut self, event: Vec<u8>) -> HResult<()> {
-        match event {
-            _ => self.bad(Event::Unsupported(event)).unwrap(),
-        }
+        // TODO.Nano: What's going on here?
+        self.bad(Event::Unsupported(event)).unwrap();
         Ok(())
     }
 
@@ -392,9 +389,8 @@ pub trait Widget {
                 }
                 Events::TerminalResized => {
                     self.get_core()?.screen()?.clear().log();
-                    match self.resize() {
-                        err @ Err(HError::TerminalResizedError) => err?,
-                        _ => {}
+                    if let err @ Err(HError::TerminalResizedError) = self.resize() {
+                        return err;
                     }
                 }
                 Events::InputUpdated(input) => HError::input_updated(input)?,
@@ -428,7 +424,7 @@ pub trait Widget {
         let number_of_frames = (ANIMATION_DURATION_MILLIS / pause_millis) as u16;
         let pause = std::time::Duration::from_millis(pause_millis);
 
-        if let Some(ref animator) = animator {
+        if let Some(animator) = animator {
             if animator.is_stale()? {
                 return Ok(());
             }
@@ -437,7 +433,7 @@ pub trait Widget {
         self.get_core()?.write_to_screen(&clear).log();
 
         for i in (0..number_of_frames).rev() {
-            if let Some(ref animator) = animator {
+            if let Some(animator) = animator {
                 if animator.is_stale()? {
                     self.set_coordinates(&coords).log();
                     return Ok(());
@@ -464,9 +460,9 @@ pub trait Widget {
     }
 
     fn draw(&mut self) -> HResult<()> {
-        let output = self.get_drawlist().unwrap_or("".to_string())
-            + &self.get_header_drawlist().unwrap_or("".to_string())
-            + &self.get_footer_drawlist().unwrap_or("".to_string());
+        let output = self.get_drawlist().unwrap_or_else(|_| "".to_string())
+            + &self.get_header_drawlist().unwrap_or_else(|_| "".to_string())
+            + &self.get_footer_drawlist().unwrap_or_else(|_| "".to_string());
         self.get_core()?.write_to_screen(&output).log();
         self.get_core()?.screen()?.flush().ok();
         Ok(())
@@ -490,11 +486,8 @@ pub trait Widget {
         for event in rx_internal_event.iter() {
             match event {
                 Events::InputEvent(event) => {
-                    match self.on_event(event) {
-                        Err(HError::Quit) => {
-                            HError::quit()?;
-                        }
-                        _ => {}
+                    if let Err(HError::Quit) = self.on_event(event) {
+                        HError::quit()?;
                     }
                     self.get_core()?.get_sender().send(Events::RequestInput)?;
                 }
@@ -537,7 +530,7 @@ fn dispatch_events(tx_internal: Sender<Events>, rx_global: Receiver<Events>, scr
 
     input_thread(tx_event.clone(), rx_input_req);
     event_thread(rx_global, tx_event.clone());
-    signal_thread(tx_event.clone());
+    signal_thread(tx_event);
 
     std::thread::spawn(move || {
         let mut tx_exclusive_event: Option<Sender<Events>> = None;
@@ -593,7 +586,7 @@ fn input_thread(tx: Sender<Events>, rx_input_request: Receiver<()>) {
                     tx.send(Events::InputEvent(input)).unwrap();
                     rx_input_request.recv().unwrap();
                 })
-                .map_err(|e| HError::from(e))
+                .map_err(HError::from)
                 .log();
         }
     });

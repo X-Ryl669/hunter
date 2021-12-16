@@ -42,7 +42,7 @@ impl TextView {
         file: &File,
         num: usize,
     ) -> HResult<TextView> {
-        let buf = std::fs::File::open(&file.path).map(|f| std::io::BufReader::new(f))?;
+        let buf = std::fs::File::open(&file.path).map(std::io::BufReader::new)?;
 
         let lines = buf
             .lines()
@@ -59,7 +59,7 @@ impl TextView {
             .collect::<HResult<_>>()?;
 
         Ok(TextView {
-            lines: lines,
+            lines,
             core: core.clone(),
             follow: false,
             offset: 0,
@@ -87,13 +87,15 @@ impl TextView {
 
     pub fn load_full(&mut self) {
         if self.limited {
-            self.file
+            let new_view = self.file
                 .as_ref()
-                .and_then(|f| TextView::new_from_file(&self.core, f).ok())
-                .map(|v| {
-                    *self = v;
-                    self.limited = false;
-                });
+                .and_then(|f| TextView::new_from_file(&self.core, f).ok());
+
+            if let Some(v) = new_view
+            {
+                *self = v;
+                self.limited = false;
+            }
         }
     }
 
@@ -101,6 +103,7 @@ impl TextView {
         self.follow = !self.follow
     }
 
+    #[allow(clippy::comparison_chain)]
     pub fn scroll(&mut self, amount: isize) {
         let ysize = self.get_coordinates().unwrap().ysize() as isize;
         let offset = self.offset as isize;
@@ -196,7 +199,7 @@ impl Widget for TextView {
                 format!(
                     "{}{}",
                     crate::term::goto_xy(xpos, i as u16 + ypos),
-                    sized_string_u(&line, (xsize - 1) as usize)
+                    sized_string_u(line, (xsize - 1) as usize)
                 )
             })
             .collect::<String>();

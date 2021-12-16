@@ -195,7 +195,7 @@ where
     fn on_key(&mut self, key: Key) -> HResult<()> {
         match self.do_key(key) {
             Err(HError::WidgetUndefinedKeyError { .. }) => Tabbable::on_key(self, key)?,
-            e @ _ => e?,
+            e => e?,
         }
 
         Ok(())
@@ -219,10 +219,10 @@ where
 
         match action {
             GotoTab(n) => self.goto_tab(*n)?,
-            NewTab => self.new_tab()?,
-            CloseTab => self.close_tab()?,
-            NextTab => self.next_tab()?,
-            PrevTab => self.prev_tab()?,
+            New => self.new_tab()?,
+            Close => self.close_tab()?,
+            Next => self.next_tab()?,
+            Prev => self.prev_tab()?,
         }
 
         Ok(())

@@ -26,7 +26,7 @@ pub struct ImgView {
 impl ImgView {
     pub fn new_from_file(core: WidgetCore, file: &Path) -> HResult<ImgView> {
         let mut view = ImgView {
-            core: core,
+            core,
             buffer: vec![],
             file: Some(file.to_path_buf()),
         };
@@ -55,8 +55,8 @@ impl ImgView {
             .arg(format!("{}", ypix))
             .arg(format!("{}", cell_ratio))
             .arg("image")
-            .arg(format!("true"))
-            .arg(format!("true"))
+            .arg("true")
+            .arg("true")
             .arg(format!("{}", g_mode))
             .arg(file.to_string_lossy().to_string())
             .stdin(Stdio::null())
@@ -96,10 +96,12 @@ impl ImgView {
         PID.store(0, Ordering::Relaxed);
 
         if !status.success() {
-            match status.code() {
-                Some(code) => Err(MediaError::MediaViewerFailed(code, ErrorCause::Str(stderr)))?,
-                None => Err(MediaError::MediaViewerKilled)?,
-            }
+            let err = match status.code() {
+                Some(code) => MediaError::MediaViewerFailed(code, ErrorCause::Str(stderr)),
+                None => MediaError::MediaViewerKilled,
+            };
+            
+            return Err(err.into());
         }
 
         self.buffer = output;
@@ -168,7 +170,7 @@ impl Widget for ImgView {
                 .iter()
                 .enumerate()
                 .fold(String::new(), |mut draw, (pos, line)| {
-                    draw += &format!("{}", crate::term::goto_xy_u(xpos, ypos + pos));
+                    draw += &crate::term::goto_xy_u(xpos, ypos + pos);
                     draw += line;
                     draw
                 });

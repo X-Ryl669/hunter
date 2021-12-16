@@ -1,7 +1,6 @@
 use std::io::{BufRead, BufWriter, Stdout, Write};
 use std::sync::Arc;
 
-use termion;
 use termion::raw::{IntoRawMode, RawTerminal};
 use termion::screen::AlternateScreen;
 
@@ -25,13 +24,13 @@ impl Screen {
     pub fn new() -> HResult<Screen> {
         let screen = BufWriter::new(std::io::stdout()).into_raw_mode()?;
         let mut screen = AlternateScreen::from(screen);
-        let terminal = std::env::var("TERM").unwrap_or("xterm".into());
+        let terminal = std::env::var("TERM").unwrap_or_else(|_| "xterm".into());
 
         screen.cursor_hide()?;
         Ok(Screen {
             screen: Arc::new(Mutex::new(screen)),
             size: Arc::new(RwLock::new(None)),
-            terminal: terminal,
+            terminal,
         })
     }
 
@@ -45,7 +44,7 @@ impl Screen {
     }
 
     pub fn get_size(&self) -> HResult<(usize, usize)> {
-        match self.size.read().clone() {
+        match *self.size.read() {
             Some((xsize, ysize)) => Ok((xsize, ysize)),
             None => Ok((self.xsize()?, self.ysize()?)),
         }
@@ -273,7 +272,7 @@ fn get_tokens(string: &str) -> Vec<Token> {
 }
 
 pub fn string_len(string: &str) -> usize {
-    let tokens = get_tokens(&string);
+    let tokens = get_tokens(string);
 
     tokens.iter().fold(0, |len, token| match token {
         Token::Text(text) => len + text.len(),
@@ -282,7 +281,7 @@ pub fn string_len(string: &str) -> usize {
 }
 
 pub fn sized_string_u(string: &str, xsize: usize) -> String {
-    let tokens = get_tokens(&string);
+    let tokens = get_tokens(string);
 
     let sized = tokens
         .iter()
@@ -320,7 +319,7 @@ pub fn sized_string_u(string: &str, xsize: usize) -> String {
                 // we're done here, stop looping
                 Err((sized, width + fillup_width))
             } else {
-                sized.push_str(&tok);
+                sized.push_str(tok);
                 Ok((sized, width + tok_width))
             }
         });
@@ -381,7 +380,7 @@ pub fn color_light_yellow() -> String {
 }
 
 pub fn color_orange() -> String {
-    let color = termion::color::Fg(termion::color::AnsiValue::rgb(5 as u8, 4 as u8, 0 as u8));
+    let color = termion::color::Fg(termion::color::AnsiValue::rgb(5_u8, 4_u8, 0_u8));
     format!("{}", color)
 }
 
@@ -395,7 +394,7 @@ pub fn from_lscolor(color: &lscolors::Color) -> String {
         lscolors::Color::Magenta => format!("{}", termion::color::Fg(termion::color::Magenta)),
         lscolors::Color::Cyan => format!("{}", termion::color::Fg(termion::color::Cyan)),
         lscolors::Color::White => format!("{}", termion::color::Fg(termion::color::White)),
-        _ => format!("{}", normal_color()),
+        _ => normal_color(),
     }
 }
 

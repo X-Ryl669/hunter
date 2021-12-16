@@ -56,8 +56,7 @@ where
     }
 
     pub fn pop_widget(&mut self) -> Option<T> {
-        let widget = self.widgets.pop();
-        widget
+        self.widgets.pop()
     }
 
     pub fn remove_widget(&mut self, index: usize) -> T {
@@ -123,7 +122,7 @@ where
                 .iter()
                 .position(|&r| r == *ratios.iter().max().unwrap())
                 .unwrap();
-            ratios[ratios_max] = ratios[ratios_max] - 1;
+            ratios[ratios_max] -= 1;
             ratios_sum -= 1;
         }
 

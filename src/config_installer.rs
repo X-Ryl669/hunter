@@ -50,11 +50,7 @@ fn default_config_archive() -> &'static [u8] {
 fn has_config() -> HResult<bool> {
     let config_dir = crate::paths::hunter_path()?;
 
-    if config_dir.exists() {
-        return Ok(true);
-    } else {
-        return Ok(false);
-    }
+    Ok(config_dir.exists())
 }
 
 fn install_config_all() -> HResult<()> {
@@ -74,7 +70,7 @@ fn install_config_all() -> HResult<()> {
     }
 
     let archive_path = create_archive()?;
-    extract_archive(config_dir, &archive_path)?;
+    extract_archive(config_dir, archive_path)?;
     delete_archive(archive_path)?;
 
     Ok(())
@@ -103,28 +99,28 @@ fn copy(from: &Path, to: &Path) -> HResult<()> {
 fn install_config_previewers() -> HResult<()> {
     let hunter_dir = crate::paths::hunter_path()?;
     let archive_path = create_archive()?;
-    extract_archive(Path::new("/tmp"), &archive_path)?;
+    extract_archive(Path::new("/tmp"), archive_path)?;
     copy(Path::new("/tmp/hunter/previewers"), &hunter_dir)?;
-    delete_archive(&archive_path)
+    delete_archive(archive_path)
 }
 
 fn install_config_actions() -> HResult<()> {
     let hunter_dir = crate::paths::hunter_path()?;
     let archive_path = create_archive()?;
-    extract_archive(Path::new("/tmp"), &archive_path)?;
+    extract_archive(Path::new("/tmp"), archive_path)?;
     copy(Path::new("/tmp/hunter/actions"), &hunter_dir)?;
-    delete_archive(&archive_path)
+    delete_archive(archive_path)
 }
 
 fn update_previewer() -> HResult<()> {
     let previewer_dir = crate::paths::previewers_path()?;
     let archive_path = create_archive()?;
 
-    extract_archive(Path::new("/tmp"), &archive_path)?;
+    extract_archive(Path::new("/tmp"), archive_path)?;
 
     update_dir(Path::new("/tmp/hunter/previewers"), &previewer_dir).log();
 
-    delete_archive(&archive_path)?;
+    delete_archive(archive_path)?;
 
     Ok(())
 }
@@ -133,11 +129,11 @@ fn update_actions() -> HResult<()> {
     let actions_dir = crate::paths::actions_path()?;
     let archive_path = create_archive()?;
 
-    extract_archive(Path::new("/tmp"), &archive_path)?;
+    extract_archive(Path::new("/tmp"), archive_path)?;
 
     update_dir(Path::new("/tmp/hunter/actions"), &actions_dir).log();
 
-    delete_archive(&archive_path)?;
+    delete_archive(archive_path)?;
 
     Ok(())
 }
@@ -154,7 +150,7 @@ pub fn update_config(core: WidgetCore, force: bool) -> HResult<()> {
     }
 
     let archive_path = create_archive()?;
-    extract_archive(Path::new("/tmp"), &archive_path)?;
+    extract_archive(Path::new("/tmp"), archive_path)?;
     Ok(())
 }
 
@@ -173,15 +169,13 @@ fn update_dir<P: AsRef<Path>>(source: P, target: P) -> HResult<()> {
         if file_path.is_dir() {
             // Check subdirectories recursively
             update_dir(&file_path, &target_path).log();
-        } else {
-            if !target_path.exists() {
-                HError::log::<()>(&format!(
-                    "Installing additional config file: {}",
-                    file_path.to_string_lossy()
-                ))
-                .ok();
-                copy(&file_path, &target_path).log();
-            }
+        } else if !target_path.exists() {
+            HError::log::<()>(&format!(
+                "Installing additional config file: {}",
+                file_path.to_string_lossy()
+            ))
+            .ok();
+            copy(&file_path, &target_path).log();
         }
     }
 
@@ -213,7 +207,7 @@ fn extract_archive(to: &Path, archive_path: &str) -> HResult<()> {
             OsStr::new(archive_path),
         ])
         .status()
-        .or_else(|_| HError::log(&format!("Couldn't run tar!")))
+        .or_else(|_| HError::log("Couldn't run tar!"))
         .map(|s| s.success())?;
 
     if !success {

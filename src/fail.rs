@@ -1,4 +1,3 @@
-use failure;
 use failure::Fail;
 use lazy_static::lazy_static;
 
@@ -125,10 +124,7 @@ impl HError {
         Err(HError::Quit)
     }
     pub fn wrong_ratio<T>(wnum: usize, ratio: Vec<usize>) -> HResult<T> {
-        Err(HError::HBoxWrongRatioError {
-            wnum: wnum,
-            ratio: ratio,
-        })
+        Err(HError::HBoxWrongRatioError { wnum, ratio, })
     }
     pub fn no_widget<T>() -> HResult<T> {
         Err(HError::NoWidgetError)
@@ -146,13 +142,10 @@ impl HError {
         Err(HError::TagsNotLoadedYetError)
     }
     pub fn undefined_key<T>(key: Key) -> HResult<T> {
-        Err(HError::WidgetUndefinedKeyError { key: key })
+        Err(HError::WidgetUndefinedKeyError { key })
     }
     pub fn wrong_directory<T>(path: PathBuf, dir: PathBuf) -> HResult<T> {
-        Err(HError::WrongDirectoryError {
-            path: path,
-            dir: dir,
-        })
+        Err(HError::WrongDirectoryError { path, dir, })
     }
     pub fn preview_failed<T>(file: &crate::files::File) -> HResult<T> {
         let name = file.name.clone();
@@ -282,106 +275,91 @@ where
 
 impl From<std::io::Error> for HError {
     fn from(error: std::io::Error) -> Self {
-        let err = HError::IoError(format!("{}", error));
-        err
+        HError::IoError(format!("{}", error))
     }
 }
 
 impl From<failure::Error> for HError {
     fn from(error: failure::Error) -> Self {
-        let err = HError::Error(format!("{}", error));
-        err
+        HError::Error(format!("{}", error))
     }
 }
 
 impl From<std::sync::mpsc::TryRecvError> for HError {
     fn from(error: std::sync::mpsc::TryRecvError) -> Self {
-        let err = HError::ChannelTryRecvError { error: error };
-        err
+        HError::ChannelTryRecvError { error }
     }
 }
 
 impl From<std::sync::mpsc::RecvError> for HError {
     fn from(error: std::sync::mpsc::RecvError) -> Self {
-        let err = HError::ChannelRecvError { error: error };
-        err
+        HError::ChannelRecvError { error }
     }
 }
 
 impl From<std::sync::mpsc::RecvTimeoutError> for HError {
     fn from(error: std::sync::mpsc::RecvTimeoutError) -> Self {
-        let err = HError::ChannelRecvTimeout(error);
-        err
+        HError::ChannelRecvTimeout(error)
     }
 }
 
 impl<T> From<std::sync::mpsc::SendError<T>> for HError {
     fn from(_error: std::sync::mpsc::SendError<T>) -> Self {
-        let err = HError::ChannelSendError;
-        err
+        HError::ChannelSendError
     }
 }
 
 impl<T> From<std::sync::PoisonError<T>> for HError {
     fn from(_: std::sync::PoisonError<T>) -> Self {
-        let err = HError::MutexError;
-        err
+        HError::MutexError
     }
 }
 
 impl<T> From<std::sync::TryLockError<T>> for HError {
     fn from(_error: std::sync::TryLockError<T>) -> Self {
-        let err = HError::TryLockError;
-        err
+        HError::TryLockError
     }
 }
 
 impl From<std::path::StripPrefixError> for HError {
     fn from(error: std::path::StripPrefixError) -> Self {
-        let err = HError::StripPrefixError { error: error };
-        err
+        HError::StripPrefixError { error }
     }
 }
 
 impl From<notify::Error> for HError {
     fn from(error: notify::Error) -> Self {
-        let err = HError::INotifyError(format!("{}", error));
-        err
+        HError::INotifyError(format!("{}", error))
     }
 }
 
 impl From<async_value::AError> for HError {
     fn from(error: async_value::AError) -> Self {
-        let err = HError::AError(error);
-        err
+        HError::AError(error)
     }
 }
 
 impl From<std::str::Utf8Error> for HError {
     fn from(error: std::str::Utf8Error) -> Self {
-        let err = HError::UTF8ParseError(error);
-        err
+        HError::UTF8ParseError(error)
     }
 }
 
 impl From<std::num::ParseIntError> for HError {
     fn from(error: std::num::ParseIntError) -> Self {
-        let err = HError::ParseIntError(error);
-        err
+        HError::ParseIntError(error)
     }
 }
 
 impl From<nix::Error> for HError {
     fn from(error: nix::Error) -> Self {
-        let err = HError::Nix(error);
-        err
+        HError::Nix(error)
     }
 }
 
 impl From<std::char::ParseCharError> for HError {
     fn from(error: std::char::ParseCharError) -> Self {
-        let err = HError::ParseCharError(error);
-        err
+        HError::ParseCharError(error)
     }
 }
 

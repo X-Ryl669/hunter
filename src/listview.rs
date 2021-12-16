@@ -121,7 +121,7 @@ impl Listable for ListView<Files> {
     fn on_refresh(&mut self) -> HResult<()> {
         if self.content.len() == 0 {
             let path = &self.content.directory.path;
-            let placeholder = File::new_placeholder(&path)?;
+            let placeholder = File::new_placeholder(path)?;
             self.content.files.push(placeholder);
             self.content.len = 1;
         }
@@ -173,7 +173,7 @@ where
 {
     pub fn new(core: &WidgetCore, content: T) -> ListView<T> {
         let mut view = ListView::<T> {
-            content: content,
+            content,
             current_item: None,
             selection: 0,
             offset: 0,
@@ -190,7 +190,7 @@ where
             return;
         }
 
-        if self.selection - self.offset <= 0 {
+        if self.selection - self.offset == 0 {
             self.offset -= 1;
         }
 
@@ -274,8 +274,8 @@ pub struct FileListBuilder {
 impl FileListBuilder {
     pub fn new(core: WidgetCore, source: FileSource) -> Self {
         FileListBuilder {
-            core: core,
-            source: source,
+            core,
+            source,
             cache: None,
             selected_file: None,
             stale: None,
@@ -321,10 +321,7 @@ impl FileListBuilder {
         crate::files::start_ticking(core.get_sender());
 
         // Already sorted
-        let nosort = match source {
-            FileSource::Files(_) => true,
-            _ => false,
-        };
+        let nosort = matches!(source, FileSource::Files(_));
 
         let mut files = match source {
             FileSource::Files(f) => Ok(f),
@@ -335,7 +332,7 @@ impl FileListBuilder {
         }?;
 
         // Check/set hidden flag and recalculate number of files if it's different
-        if !files.show_hidden == cfg.show_hidden() {
+        if files.show_hidden != cfg.show_hidden() {
             files.show_hidden = cfg.show_hidden();
             files.recalculate_len();
         }
@@ -347,15 +344,23 @@ impl FileListBuilder {
 
         let mut view = ListView::new(&core, files);
 
-        selected_file
-            .or_else(|| {
-                c.as_ref()
-                    .and_then(|c| c.get_selection(&view.content.directory).ok().flatten())
-            })
-            .map(|f| view.select_file(&f));
+        let selected_file = selected_file
+            .or_else(|| c
+                .as_ref()
+                .and_then(|c| c.get_selection(&view.content.directory).ok().flatten()));
 
-        self.stale.map(|s| view.content.stale = Some(s));
-        self.cache.map(|c| view.content.cache = Some(c));
+        if let Some(f) = selected_file {
+            view.select_file(&f);
+        }
+
+        if let Some(s) = self.stale {
+            view.content.stale = Some(s);
+        }
+
+        if let Some(c) = self.cache {
+            view.content.cache = Some(c);
+        }
+
         view.content.set_clean();
         view.core.set_clean();
 
@@ -385,8 +390,7 @@ impl ListView<Files> {
         let file = self
             .content
             .iter_files_from(self.selected_file(), seek_back)
-            .skip(skip)
-            .nth(0);
+            .nth(skip);
 
         self.current_item = file.cloned();
     }
@@ -394,7 +398,7 @@ impl ListView<Files> {
     pub fn selected_file(&self) -> &File {
         self.current_item
             .as_ref()
-            .or_else(|| self.content.iter_files().nth(0))
+            .or_else(|| self.content.iter_files().next())
             .unwrap()
     }
 
@@ -404,7 +408,7 @@ impl ListView<Files> {
         let file = self
             .content
             .iter_files_mut_from(&selected_file, 0)
-            .nth(0)
+            .next()
             .map(|f| f as *mut File);
 
         // Work around annoying restriction until polonius borrow checker becomes default
@@ -446,11 +450,11 @@ impl ListView<Files> {
                 let dir = &self.content.directory.path;
                 let file = file.path;
 
-                HError::wrong_directory::<()>(dir.clone(), file.clone()).log();
+                HError::wrong_directory::<()>(dir.clone(), file).log();
                 let file = self
                     .content
                     .iter_files()
-                    .nth(0)
+                    .next()
                     .cloned()
                     .or_else(|| File::new_placeholder(dir).ok())
                     .unwrap();
@@ -493,7 +497,7 @@ impl ListView<Files> {
 
         self.select_file(&file);
 
-        if self.seeking == false || self.selection + 1 >= self.content.len() {
+        if !self.seeking || self.selection + 1 >= self.content.len() {
             self.selection = 0;
             self.offset = 0;
         } else {
@@ -521,7 +525,7 @@ impl ListView<Files> {
 
         self.select_file(&file);
 
-        if self.seeking == false || self.selection == 0 {
+        if !self.seeking || self.selection == 0 {
             self.set_selection(self.content.len() - 1);
         } else {
             self.move_up();
@@ -639,9 +643,9 @@ impl ListView<Files> {
                     match ev {
                         Done(_) => {}
                         NewInput(input) => {
-                            let file = self.content.find_file_with_name(&input).cloned();
-
-                            file.map(|f| self.select_file(&f));
+                            if let Some(f) = self.content.find_file_with_name(&input).cloned() {
+                                self.select_file(&f);
+                            }
 
                             self.draw().log();
 
@@ -683,14 +687,7 @@ impl ListView<Files> {
             .files
             .iter()
             .skip(selection + 1)
-            .find(|file| {
-                if file.name.to_lowercase().contains(&prev_search) {
-                    true
-                } else {
-                    false
-                }
-            })
-            .clone();
+            .find(|file| file.name.to_lowercase().contains(&prev_search));
 
         if let Some(file) = file {
             let file = file.clone();
@@ -719,20 +716,13 @@ impl ListView<Files> {
             .files
             .iter()
             .skip(selection + 1)
-            .find(|file| {
-                if file.name.to_lowercase().contains(&prev_search) {
-                    true
-                } else {
-                    false
-                }
-            })
+            .find(|file| file.name.to_lowercase().contains(&prev_search))
             .cloned();
 
         self.reverse_sort();
         self.core.clear_status().log();
 
         if let Some(file) = file {
-            let file = file.clone();
             self.select_file(&file);
         } else {
             self.core.show_status("Reached last search result!").log();
@@ -768,8 +758,8 @@ impl ListView<Files> {
         loop {
             let filter = self.core.minibuffer_continuous("filter");
 
-            match filter {
-                Err(HError::MiniBufferEvent(event)) => match event {
+            if let Err(HError::MiniBufferEvent(event)) = filter {
+                match event {
                     Done(filter) => {
                         self.core
                             .show_status(&format!("Filtering with: \"{}\"", &filter))
@@ -789,8 +779,7 @@ impl ListView<Files> {
                         self.select_file(&selected_file);
                     }
                     _ => {}
-                },
-                _ => {}
+                }
             }
 
             break;
@@ -851,7 +840,7 @@ impl ListView<Files> {
                 _ => (None, 0),
             };
 
-            let tag = tag.as_ref().map(|t| t.as_str()).unwrap_or("");
+            let tag = tag.as_deref().unwrap_or("");
 
             let selection_color = crate::term::color_yellow();
             let (selection_gap, selection_color) = match file.is_selected() {
@@ -872,12 +861,11 @@ impl ListView<Files> {
                 None => (None, None),
             };
 
-            let link_indicator = link_indicator.as_ref().map(|l| l.as_str()).unwrap_or("");
+            let link_indicator = link_indicator.as_deref().unwrap_or("");
             let link_indicator_len = link_indicator_len.unwrap_or(0);
 
-            let sized_string = term::sized_string(&name, xsize);
+            let sized_string = term::sized_string(name, xsize);
 
-            let size = size.to_string();
             let size_pos =
                 xsize - (size.len() as u16 + unit.len() as u16 + link_indicator_len as u16);
 
@@ -945,7 +933,7 @@ impl ListView<Files> {
         self.content
             .iter_files_from(selected_file, files_above_selection)
             .take(ysize + 1)
-            .map(|file| render_fn(file))
+            .map(render_fn)
             .collect()
     }
 
@@ -1017,7 +1005,8 @@ where
                     item,
                     term::reset()
                 );
-                String::from(output)
+                
+                output
             })
             .collect::<String>();
 

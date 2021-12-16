@@ -48,11 +48,7 @@ fn kill_proc() -> HResult<()> {
 
 impl<W: Widget + Send + 'static> PartialEq for AsyncWidget<W> {
     fn eq(&self, other: &AsyncWidget<W>) -> bool {
-        if self.get_coordinates().unwrap() == other.get_coordinates().unwrap() {
-            true
-        } else {
-            false
-        }
+        self.get_coordinates().unwrap() == other.get_coordinates().unwrap()
     }
 }
 
@@ -85,7 +81,7 @@ impl<W: Widget + Send + 'static> AsyncWidget<W> {
         widget.run().log();
 
         AsyncWidget {
-            widget: widget,
+            widget,
             core: core.clone(),
         }
     }
@@ -98,7 +94,7 @@ impl<W: Widget + Send + 'static> AsyncWidget<W> {
         let sender = Mutex::new(self.get_core()?.get_sender());
         let core = self.get_core()?.clone();
 
-        let mut widget = Async::new(move |stale| Ok(closure(stale, core.clone())?));
+        let mut widget = Async::new(move |stale| Ok(closure(stale, core)?));
 
         widget
             .on_ready(move |_, stale| {
@@ -159,7 +155,7 @@ impl<T: Widget + Send + 'static> Widget for AsyncWidget<T> {
     fn set_coordinates(&mut self, coordinates: &Coordinates) -> HResult<()> {
         self.core.coordinates = coordinates.clone();
         if let Ok(widget) = self.widget_mut() {
-            widget.set_coordinates(&coordinates)?;
+            widget.set_coordinates(coordinates)?;
         }
         Ok(())
     }
@@ -208,11 +204,7 @@ impl<T: Widget + Send + 'static> Widget for AsyncWidget<T> {
 
 impl PartialEq for Previewer {
     fn eq(&self, other: &Previewer) -> bool {
-        if self.widget.get_coordinates().unwrap() == other.widget.get_coordinates().unwrap() {
-            true
-        } else {
-            false
-        }
+        self.widget.get_coordinates().unwrap() == other.widget.get_coordinates().unwrap()
     }
 }
 
@@ -243,16 +235,15 @@ fn find_previewer(file: &File, g_mode: bool) -> HResult<ExtPreviewer> {
             .find(|previewer| {
                 previewer
                     .as_ref()
-                    .and_then(|p| {
-                        Ok(p.path().file_stem() == Some(ext)
-                            && p.path().extension() == Some(&std::ffi::OsStr::new("g")))
-                    })
+                    .map(|p| 
+                        p.path().file_stem() == Some(ext)
+                        && p.path().extension() == Some(std::ffi::OsStr::new("g"))                    )
                     .unwrap_or(false)
             })
             .map(|p| p.map(|p| p.path()));
-        match g_previewer {
-            Some(Ok(g_p)) => return Ok(ExtPreviewer::Graphics(g_p)),
-            _ => {}
+
+        if let Some(Ok(g_p)) = g_previewer {
+            return Ok(ExtPreviewer::Graphics(g_p))
         }
     }
 
@@ -262,7 +253,7 @@ fn find_previewer(file: &File, g_mode: bool) -> HResult<ExtPreviewer> {
         .find(|previewer| {
             previewer
                 .as_ref()
-                .and_then(|p| Ok(p.file_name() == ext))
+                .map(|p| p.file_name() == ext)
                 .unwrap_or(false)
         })
         .map(|p| p.map(|p| p.path()));
@@ -300,17 +291,17 @@ pub struct Previewer {
 impl Previewer {
     pub fn new(core: &WidgetCore, cache: FsCache) -> Previewer {
         let core_ = core.clone();
-        let widget = AsyncWidget::new(&core, move |_| {
+        let widget = AsyncWidget::new(core, move |_| {
             let blank = TextView::new_blank(&core_);
             let blank = PreviewWidget::TextView(blank);
             Ok(blank)
         });
 
         Previewer {
-            widget: widget,
+            widget,
             core: core.clone(),
             file: None,
-            cache: cache,
+            cache,
             animator: Stale::new(),
         }
     }
@@ -354,7 +345,7 @@ impl Previewer {
             .change_to(move |stale, core| {
                 let source = crate::listview::FileSource::Files(files);
 
-                let list = ListView::builder(core.clone(), source)
+                let list = ListView::builder(core, source)
                     // .prerender()
                     .with_cache(cache)
                     .with_stale(stale.clone())
@@ -401,11 +392,11 @@ impl Previewer {
             }
 
             if file.kind == Kind::Directory {
-                let preview = Previewer::preview_dir(&file, cache, &core, &stale, &animator);
-                return Ok(preview?);
+                let preview = Previewer::preview_dir(&file, cache, &core, stale, &animator);
+                return preview;
             }
 
-            if let Some(mime) = file.get_mime().log_and().ok() {
+            if let Ok(mime) = file.get_mime().log_and() {
                 let mime_type = mime.type_().as_str();
                 let is_gif = mime.subtype() == "gif";
                 let has_media = core.config().media_available();
@@ -430,12 +421,12 @@ impl Previewer {
                         return Ok(PreviewWidget::MediaView(mediaview));
                     }
                     "text" if mime.subtype() == "plain" => {
-                        return Ok(Previewer::preview_text(&file, &core, &stale, &animator)?);
+                        return Previewer::preview_text(&file, &core, stale, &animator);
                     }
                     _ => {
-                        let preview = Previewer::preview_external(&file, &core, &stale, &animator);
+                        let preview = Previewer::preview_external(&file, &core, stale, &animator);
                         if preview.is_ok() {
-                            return Ok(preview?);
+                            return preview;
                         }
                     }
                 }
@@ -445,7 +436,8 @@ impl Previewer {
             blank.set_coordinates(&coordinates).log();
             blank.refresh().log();
             blank.animate_slide_up(Some(&animator)).log();
-            return Ok(PreviewWidget::TextView(blank));
+
+            Ok(PreviewWidget::TextView(blank))
         })))
     }
 
@@ -456,9 +448,8 @@ impl Previewer {
     }
 
     pub fn reload_text(&mut self) {
-        match self.widget.widget_mut() {
-            Ok(PreviewWidget::TextView(w)) => w.load_full(),
-            _ => {}
+        if let Ok(PreviewWidget::TextView(w)) = self.widget.widget_mut() {
+            w.load_full()
         }
     }
 
@@ -476,7 +467,7 @@ impl Previewer {
         use crate::dirty::Dirtyable;
 
         if stale.is_stale()? {
-            return Previewer::preview_failed(&file);
+            return Previewer::preview_failed(file);
         }
         let source = FileSource::Path(file.clone());
 
@@ -486,7 +477,7 @@ impl Previewer {
             .build()?;
 
         if stale.is_stale()? {
-            return Previewer::preview_failed(&file);
+            return Previewer::preview_failed(file);
         }
 
         // Start loading metadata during animation
@@ -508,16 +499,16 @@ impl Previewer {
 
         let lines = core.coordinates.ysize() as usize;
 
-        let mut textview = TextView::new_from_file_limit_lines(&core, &file, lines)?;
+        let mut textview = TextView::new_from_file_limit_lines(core, file, lines)?;
         if stale.is_stale()? {
-            return Previewer::preview_failed(&file);
+            return Previewer::preview_failed(file);
         }
 
         textview.set_coordinates(&core.coordinates)?;
         textview.refresh()?;
 
         if stale.is_stale()? {
-            return Previewer::preview_failed(&file);
+            return Previewer::preview_failed(file);
         }
 
         // Prevent flicker during slide up
@@ -551,11 +542,11 @@ impl Previewer {
         }
 
         if stale.is_stale()? {
-            return Previewer::preview_failed(&file);
+            return Previewer::preview_failed(file);
         }
         let output = process.wait_with_output()?;
         if stale.is_stale()? {
-            return Previewer::preview_failed(&file);
+            return Previewer::preview_failed(file);
         }
 
         {
@@ -584,22 +575,22 @@ impl Previewer {
         let mut ticker = Ticker::start_ticking(core.get_sender());
 
         let previewer = if core.config().graphics.as_str() != "unicode" {
-            find_previewer(&file, true)?
+            find_previewer(file, true)?
         } else {
-            find_previewer(&file, false)?
+            find_previewer(file, false)?
         };
 
         match previewer {
             ExtPreviewer::Text(previewer) => {
                 if stale.is_stale()? {
-                    return Previewer::preview_failed(&file);
+                    return Previewer::preview_failed(file);
                 }
                 let lines = Previewer::run_external(previewer, file, stale)?;
                 if stale.is_stale()? {
-                    return Previewer::preview_failed(&file);
+                    return Previewer::preview_failed(file);
                 }
 
-                let mut textview = TextView::new_blank(&core);
+                let mut textview = TextView::new_blank(core);
                 textview.set_lines(lines)?;
                 textview.set_coordinates(&core.coordinates).log();
                 textview.refresh().log();
@@ -649,7 +640,7 @@ impl Widget for Previewer {
 
     fn set_coordinates(&mut self, coordinates: &Coordinates) -> HResult<()> {
         self.core.coordinates = coordinates.clone();
-        self.widget.set_coordinates(&coordinates)
+        self.widget.set_coordinates(coordinates)
     }
 
     fn refresh(&mut self) -> HResult<()> {
@@ -734,10 +725,10 @@ where
     T: Widget + ?Sized,
 {
     fn get_core(&self) -> HResult<&WidgetCore> {
-        Ok((**self).get_core()?)
+        (**self).get_core()
     }
     fn get_core_mut(&mut self) -> HResult<&mut WidgetCore> {
-        Ok((**self).get_core_mut()?)
+        (**self).get_core_mut()
     }
     fn render_header(&self) -> HResult<String> {
         (**self).render_header()

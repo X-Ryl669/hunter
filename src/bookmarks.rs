@@ -39,7 +39,7 @@ impl Bookmarks {
 
         let bm_content = std::fs::read_to_string(bm_file)?;
         let mapping = bm_content.lines().fold(HashMap::new(), |mut bm, line| {
-            let parts = line.splitn(2, ":").collect::<Vec<&str>>();
+            let parts = line.splitn(2, ':').collect::<Vec<&str>>();
             if parts.len() == 2 {
                 if let Some(key) = parts[0].chars().next() {
                     let path = parts[1].to_string();

@@ -56,9 +56,8 @@ impl Cmd {
 
         let cmd = self.substitute_cwd_files(cmd);
         let cmd = self.substitute_tab_files(cmd);
-        let cmd = self.substitute_tab_paths(cmd);
 
-        cmd
+        self.substitute_tab_paths(cmd)
     }
 
     fn perform_substitution(
@@ -112,7 +111,7 @@ impl Cmd {
             .into_iter()
             .enumerate()
             .fold(cmd, |cmd, (i, tab_files)| {
-                let tab_files_pat = String::from(format!("${}s", i));
+                let tab_files_pat = format!("${}s", i);
                 self.perform_substitution(cmd, &tab_files_pat, tab_files)
             })
     }
@@ -127,7 +126,7 @@ impl Cmd {
             .into_iter()
             .enumerate()
             .fold(cmd, |cmd, (i, tab_path)| {
-                let tab_path_pat = String::from(format!("${}", i));
+                let tab_path_pat = format!("${}", i);
                 self.perform_substitution(cmd, &tab_path_pat, vec![tab_path])
             })
     }
@@ -237,7 +236,7 @@ impl Listable for ListView<Vec<Process>> {
 
 impl ListView<Vec<Process>> {
     fn run_proc_subshell(&mut self, mut cmd: Cmd) -> HResult<()> {
-        let shell = std::env::var("SHELL").unwrap_or("sh".into());
+        let shell = std::env::var("SHELL").unwrap_or_else(|_| "sh".into());
         let home = crate::paths::home_path()?.into_os_string();
         let fg = cmd.cmd.as_bytes().ends_with(b"!");
 
@@ -259,9 +258,9 @@ impl ListView<Vec<Process>> {
             .to_string();
 
         let shell_args = cmd_args;
-        let shell_args = vec![OsString::from("-c"), shell_args.clone()];
+        let shell_args = vec![OsString::from("-c"), shell_args];
 
-        cmd.cmd = OsString::from(shell.clone());
+        cmd.cmd = OsString::from(shell);
         cmd.args = Some(shell_args);
         cmd.short_cmd = Some(short_cmd);
 
@@ -310,7 +309,7 @@ impl ListView<Vec<Process>> {
             Err(e) => {
                 let msg = format!("Error! Failed to start process: {}", e);
                 self.core.show_status(&msg)?;
-                return Err(e)?;
+                return Err(e.into());
             }
         };
 
@@ -331,8 +330,8 @@ impl ListView<Vec<Process>> {
         let real_cmd = cmd.cmd;
         let short_cmd = cmd
             .short_cmd
-            .unwrap_or(real_cmd.to_string_lossy().to_string());
-        let args = cmd.args.unwrap_or(vec![]);
+            .unwrap_or_else(|| real_cmd.to_string_lossy().to_string());
+        let args = cmd.args.unwrap_or_else(Vec::new);
 
         self.core
             .show_status(&format!("Running (fg): {}", &short_cmd))
@@ -354,13 +353,13 @@ impl ListView<Vec<Process>> {
                     format!(
                         "{}{}",
                         term::color_green(),
-                        status.code().unwrap_or(status.signal().unwrap_or(-1))
+                        status.code().unwrap_or_else(|| status.signal().unwrap_or(-1))
                     )
                 } else {
                     format!(
                         "{}{}",
                         term::color_red(),
-                        status.code().unwrap_or(status.signal().unwrap_or(-1))
+                        status.code().unwrap_or_else(|| status.signal().unwrap_or(-1))
                     )
                 };
 
@@ -506,19 +505,19 @@ impl HBox<ProcViewWidgets> {
 impl ProcView {
     pub fn new(core: &WidgetCore) -> ProcView {
         let tcore = core.clone();
-        let listview = ListView::new(&core, vec![]);
-        let textview = AsyncWidget::new(&core, move |_| {
+        let listview = ListView::new(core, vec![]);
+        let textview = AsyncWidget::new(core, move |_| {
             let textview = TextView::new_blank(&tcore);
             Ok(textview)
         });
-        let mut hbox = HBox::new(&core);
+        let mut hbox = HBox::new(core);
         hbox.push_widget(ProcViewWidgets::List(listview));
         hbox.push_widget(ProcViewWidgets::TextView(textview));
         hbox.set_ratios(vec![33, 66]);
         hbox.refresh().log();
         ProcView {
             core: core.clone(),
-            hbox: hbox,
+            hbox,
             viewing: None,
             animator: Stale::new(),
         }
@@ -547,7 +546,7 @@ impl ProcView {
     }
 
     pub fn remove_proc(&mut self) -> HResult<()> {
-        if self.get_listview_mut().content.len() == 0 {
+        if self.get_listview_mut().content.is_empty() {
             return Ok(());
         }
         self.get_listview_mut().remove_proc()?;
@@ -631,7 +630,7 @@ impl Widget for ProcView {
     fn set_coordinates(&mut self, coordinates: &Coordinates) -> HResult<()> {
         self.core.coordinates = coordinates.clone();
         self.hbox.core.coordinates = coordinates.clone();
-        self.hbox.set_coordinates(&coordinates)
+        self.hbox.set_coordinates(coordinates)
     }
 
     fn render_header(&self) -> HResult<String> {
@@ -659,7 +658,7 @@ impl Widget for ProcView {
             let proc_success = proc.success.lock();
 
             let procinfo = if proc_status.is_some() {
-                let color_success = if let Some(_) = *proc_success {
+                let color_success = if proc_success.is_some() {
                     format!("{}successfully", term::color_green())
                 } else {
                     format!("{}unsuccessfully", term::color_red())
@@ -740,7 +739,7 @@ impl Acting for ProcView {
             Close => {
                 self.animator.set_stale().log();
                 self.core.clear().log();
-                Err(HError::PopupFinnished)?
+                return Err(HError::PopupFinnished)
             }
             Remove => self.remove_proc()?,
             Kill => self.get_listview_mut().kill_proc()?,

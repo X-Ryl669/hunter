@@ -1,7 +1,6 @@
 // Based on https://github.com/jD91mZM2/termplay
 // MIT License
 
-use base64;
 use image::{DynamicImage, GenericImageView, RgbaImage};
 
 use termion::color::{Bg, Fg, Rgb};
@@ -65,7 +64,7 @@ fn main() -> MResult<()> {
         "sixel" => RenderTarget::Sixel,
         "kitty" => RenderTarget::Kitty,
         "auto" => {
-            let term = std::env::var("TERM").unwrap_or(String::from(""));
+            let term = std::env::var("TERM").unwrap_or_else(|_| String::from(""));
             match term.as_str() {
                 "kitty" => RenderTarget::Kitty,
                 #[cfg(feature = "sixel")]
@@ -327,7 +326,7 @@ pub fn audio_preview(path: &String, autoplay: bool, mute: bool) -> MResult<()> {
             last_pos = Some(position);
 
             // MediaView needs empty line as separator
-            writeln!(stdout, "")?;
+            writeln!(stdout)?;
             // Send height, position and duration
             writeln!(stdout, "0")?;
             writeln!(stdout, "{}", position)?;
@@ -652,7 +651,7 @@ impl RenderTarget {
                 println!("{}", line);
             }
 
-            println!("");
+            println!();
 
             Ok(())
         })
@@ -675,7 +674,7 @@ impl RenderTarget {
                 "\x1b_Gf=32,s={},v={},c={},r={},a=T,t=f;{}\x1b\\",
                 img_x, img_y, w, h, path
             );
-            println!("");
+            println!();
 
             Ok(())
         })
@@ -705,8 +704,8 @@ impl RenderTarget {
             encoder.encode_bytes(frame).map_err(sixfail)?;
 
             // No end of line printed by encoder
-            println!("");
-            println!("");
+            println!();
+            println!();
 
             Ok(())
         })
@@ -737,21 +736,17 @@ impl Renderer {
         mut ypix: usize,
         cell_ratio: f32,
     ) -> Renderer {
-        #[cfg(feature = "sixel")]
-        match std::env::var("TERM") {
-            Ok(term) => {
-                if term == "xterm" && target == RenderTarget::Sixel {
-                    // xterm has a hard limit on graphics size
-                    // maybe splitting the image into parts would work?
-                    if xpix > 1000 {
-                        xpix = 1000
-                    };
-                    if ypix > 1000 {
-                        ypix = 1000
-                    };
-                }
+        if let Ok(term) = std::env::var("TERM") {
+            if term == "xterm" && target == RenderTarget::Sixel {
+                // xterm has a hard limit on graphics size
+                // maybe splitting the image into parts would work?
+                if xpix > 1000 {
+                    xpix = 1000
+                };
+                if ypix > 1000 {
+                    ypix = 1000
+                };
             }
-            _ => {}
         }
 
         Renderer {
@@ -801,7 +796,7 @@ impl Renderer {
     }
 
     fn send_image(&self, image: &(impl WithRaw + ImgSize)) -> MResult<()> {
-        self.target.send_image(image, &self)?;
+        self.target.send_image(image, self)?;
 
         Ok(())
     }
@@ -885,7 +880,7 @@ fn fill_ratio(ratio: f32, max_x: usize, max_y: usize) -> (usize, usize) {
     let mut new_y;
 
     // tall / slim
-    if ratio < 1 as f32 {
+    if ratio < 1_f32 {
         new_x = (max_y as f32 * ratio) as usize;
         new_y = max_y;
         // short / wide
