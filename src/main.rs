@@ -1,39 +1,5 @@
 #![allow(dead_code)]
 
-extern crate termion;
-extern crate unicode_width;
-#[macro_use]
-extern crate lazy_static;
-extern crate failure;
-extern crate failure_derive;
-extern crate natord;
-extern crate dirs_2;
-extern crate lscolors;
-extern crate users;
-extern crate chrono;
-extern crate rayon;
-extern crate libc;
-extern crate notify;
-extern crate parse_ansi;
-extern crate signal_notify;
-extern crate tree_magic_fork;
-extern crate systemstat;
-extern crate mime_guess;
-extern crate mime;
-extern crate clap;
-extern crate strum;
-#[macro_use]
-extern crate strum_macros;
-#[macro_use]
-extern crate derivative;
-extern crate nix;
-extern crate strip_ansi_escapes;
-extern crate crossbeam;
-
-extern crate osstrtools;
-extern crate pathbuftools;
-extern crate async_value;
-
 use failure::Fail;
 use clap::{App, Arg};
 

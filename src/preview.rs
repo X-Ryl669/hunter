@@ -16,6 +16,8 @@ use crate::fail::{HResult, HError, ErrorLog};
 use crate::imgview::ImgView;
 use crate::mediaview::MediaView;
 
+use lazy_static::lazy_static;
+
 
 pub type AsyncWidgetFn<W> = dyn FnOnce(&Stale, WidgetCore)
                                        -> HResult<W> + Send + Sync;

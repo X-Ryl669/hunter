@@ -6,7 +6,7 @@ use termion::screen::AlternateScreen;
 use termion::raw::{IntoRawMode, RawTerminal};
 
 use parse_ansi::parse_bytes;
-use crate::unicode_width::{UnicodeWidthStr, UnicodeWidthChar};
+use unicode_width::{UnicodeWidthStr, UnicodeWidthChar};
 use parking_lot::{Mutex, RwLock};
 
 use crate::fail::{HResult, ErrorLog};

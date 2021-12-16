@@ -1,3 +1,4 @@
+use strum_macros::{EnumString, EnumIter};
 use termion::event::Key;
 use ini::Ini;
 use strum::IntoEnumIterator;
@@ -10,6 +11,8 @@ use std::fmt::{Display, Debug};
 use crate::fail::{HError, HResult, KeyBindError, ErrorLog};
 use crate::widget::Widget;
 
+use std::string::ToString;
+use strum_macros::Display;
 
 pub type KbResult<T> = Result<T, KeyBindError>;
 

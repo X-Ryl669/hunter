@@ -11,6 +11,8 @@ use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::ffi::OsStr;
 
+use derivative::Derivative;
+
 use failure;
 use failure::Fail;
 use lscolors::LsColors;
@@ -37,6 +39,7 @@ use crate::dirty::{DirtyBit, Dirtyable};
 use crate::widget::Events;
 use crate::icon::Icons;
 use crate::fscache::{FsCache, FsEvent};
+use lazy_static::lazy_static;
 
 lazy_static! {
     static ref COLORS: LsColors = LsColors::from_env().unwrap_or_default();

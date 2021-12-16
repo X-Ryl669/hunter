@@ -1,7 +1,10 @@
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::io::{BufReader, BufRead};
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{Ordering, AtomicU32};
+
+use lazy_static::lazy_static;
+use derivative::Derivative;
 
 use crate::widget::{Widget, WidgetCore};
 use crate::coordinates::Coordinates;

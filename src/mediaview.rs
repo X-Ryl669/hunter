@@ -1,11 +1,11 @@
-use lazy_static;
+use lazy_static::lazy_static;
 use termion::event::Key;
 use failure::{self, Fail};
 use parking_lot::{Mutex, RwLock};
 
 use crate::widget::{Widget, WidgetCore};
 use crate::coordinates::Coordinates;
-use crate::async_value::Stale;
+use async_value::Stale;
 use crate::fail::{HResult, HError, ErrorLog, ErrorCause};
 use crate::imgview::ImgView;
 

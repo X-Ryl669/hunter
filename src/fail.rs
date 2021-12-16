@@ -1,7 +1,6 @@
 use failure;
 use failure::Fail;
-//use failure::Backtrace;
-//use async_value::AError;
+use lazy_static::lazy_static;
 
 
 use termion::event::Key;

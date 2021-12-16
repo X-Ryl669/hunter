@@ -14,7 +14,7 @@ use crate::minibuffer::MiniBuffer;
 use crate::term;
 use crate::term::{Screen, ScreenExt};
 use crate::dirty::{Dirtyable, DirtyBit};
-use crate::signal_notify::{notify, Signal};
+use signal_notify::{notify, Signal};
 use crate::config::Config;
 
 
