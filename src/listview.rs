@@ -841,7 +841,7 @@ impl ListView<Files> {
                 _ => (None, 0),
             };
 
-            let tag = tag.as_deref.unwrap_or("");
+            let tag = tag.as_deref().unwrap_or("");
 
             let selection_color = crate::term::color_yellow();
             let (selection_gap, selection_color) = match file.is_selected() {

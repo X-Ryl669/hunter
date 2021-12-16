@@ -91,15 +91,16 @@ impl FsEventDispatcher {
     }
 
     fn remove_target(&self, dir: &File) -> HResult<()> {
-        self.targets.write()?.get_mut(dir).map(|targets| {
+        if let Some(targets) = self.targets.write()?.get_mut(dir) {
             targets.retain(|t| t.upgrade().is_some());
-        });
+        }
+
         Ok(())
     }
 
     fn dispatch(&self, events: HashMap<File, Vec<FsEvent>>) -> HResult<()> {
         for (dir, events) in events {
-            for target_dirs in self.targets.read()?.get(&dir) {
+            if let Some(target_dirs) = self.targets.read()?.get(&dir) {
                 for target in target_dirs {
                     if let Some(target) = target.upgrade() {
                         let events = events.clone();
@@ -174,21 +175,21 @@ impl FsCache {
     }
 
     pub fn get_files_sync_stale(&self, dir: &File, stale: Stale) -> HResult<Files> {
-        let files = self.get_files(&dir, stale)?.1;
+        let files = self.get_files(dir, stale)?.1;
         let files = files.run_sync()?;
         let files = FsCache::ensure_not_empty(files)?;
         Ok(files)
     }
 
     pub fn get_files_sync(&self, dir: &File) -> HResult<Files> {
-        let files = self.get_files(&dir, Stale::new())?.1;
+        let files = self.get_files(dir, Stale::new())?.1;
         let files = files.run_sync()?;
         let files = FsCache::ensure_not_empty(files)?;
         Ok(files)
     }
 
     pub fn get_selection(&self, dir: &File) -> HResult<Option<File>> {
-        let settings = match self.tab_settings.read()?.get(&dir).cloned() {
+        let settings = match self.tab_settings.read()?.get(dir).cloned() {
             Some(s) => s,
             None => return Ok(None),
         };
@@ -198,7 +199,7 @@ impl FsCache {
 
     pub fn set_selection(&self, dir: File, selection: File) -> HResult<()> {
         self.tab_settings.write().map(|mut settings| {
-            let setting = settings.entry(dir).or_insert(TabSettings::new());
+            let setting = settings.entry(dir).or_insert_with(|| TabSettings::new());
             setting.selection = Some(selection);
         })?;
         Ok(())
@@ -206,7 +207,7 @@ impl FsCache {
 
     pub fn save_settings(&self, files: &Files, selection: Option<File>) -> HResult<()> {
         let dir = files.directory.clone();
-        let tab_settings = FsCache::extract_tab_settings(&files, selection);
+        let tab_settings = FsCache::extract_tab_settings(files, selection);
         self.tab_settings.write()?.insert(dir, tab_settings);
         Ok(())
     }
@@ -267,7 +268,7 @@ impl FsCache {
             .watched_dirs
             .read()?
             .difference(&open_dirs)
-            .map(|dir| dir.clone())
+            .cloned()
             .collect::<Vec<File>>();
 
         for watch in removable {
@@ -278,7 +279,7 @@ impl FsCache {
     }
 
     fn add_watch(&self, dir: &File) -> HResult<()> {
-        if !self.watched_dirs.read()?.contains(&dir) {
+        if !self.watched_dirs.read()?.contains(dir) {
             self.watcher
                 .write()?
                 .watch(&dir.path, RecursiveMode::NonRecursive)?;
@@ -288,7 +289,7 @@ impl FsCache {
     }
 
     fn remove_watch(&self, dir: &File) -> HResult<()> {
-        if self.watched_dirs.read()?.contains(&dir) {
+        if self.watched_dirs.read()?.contains(dir) {
             self.watched_dirs.write()?.remove(dir);
             self.watcher.write()?.unwatch(&dir.path)?
         }
@@ -296,7 +297,7 @@ impl FsCache {
     }
 
     fn get_cached_files(&self, dir: &File) -> HResult<CachedFiles> {
-        let tab_settings = match self.tab_settings.read()?.get(&dir) {
+        let tab_settings = match self.tab_settings.read()?.get(dir) {
             Some(tab_settings) => tab_settings.clone(),
             None => TabSettings::new(),
         };
@@ -307,7 +308,7 @@ impl FsCache {
         let files = Async::new(move |_| {
             let mut files = file_cache
                 .read()
-                .map_err(|e| HError::from(e))?
+                .map_err(HError::from)?
                 .get(&dir)
                 .ok_or_else(|| {
                     failure::err_msg(format!(
@@ -324,7 +325,7 @@ impl FsCache {
             files.show_hidden = tab_settings.dir_settings.show_hidden;
             files.filter = tab_settings.dir_settings.filter.clone();
 
-            if tab_settings.multi_selections.len() > 0 {
+            if !tab_settings.multi_selections.is_empty() {
                 for file in &mut files.files {
                     for selected_files in &tab_settings.multi_selections {
                         if file.path == selected_files.path {
@@ -343,7 +344,7 @@ impl FsCache {
 
     pub fn apply_settingss(cache: &FsCache, files: &mut Files) -> HResult<()> {
         let dir = &files.directory;
-        let tab_settings = match cache.tab_settings.read()?.get(&dir).cloned() {
+        let tab_settings = match cache.tab_settings.read()?.get(dir).cloned() {
             Some(s) => s,
             None => return Ok(()),
         };
@@ -362,7 +363,7 @@ impl FsCache {
         files.filter = tab_settings.dir_settings.filter.clone();
         files.filter_selected = tab_settings.dir_settings.filter_selected;
 
-        if tab_settings.multi_selections.len() > 0 {
+        if !tab_settings.multi_selections.is_empty() {
             for file in &mut files.files {
                 for selected_files in &tab_settings.multi_selections {
                     if file.path == selected_files.path {
@@ -378,7 +379,7 @@ impl FsCache {
     pub fn ensure_not_empty(mut files: Files) -> HResult<Files> {
         if files.len() == 0 {
             let path = &files.directory.path;
-            let placeholder = File::new_placeholder(&path)?;
+            let placeholder = File::new_placeholder(path)?;
             files.files.push(placeholder);
             files.len = 1;
         }
@@ -416,7 +417,7 @@ impl FsEvent {
             Create(event_file)
             | Change(event_file)
             | Remove(event_file)
-            | Rename(_, event_file) => &event_file,
+            | Rename(_, event_file) => event_file,
         }
     }
 
@@ -451,13 +452,13 @@ impl TryFrom<DebouncedEvent> for FsEvent {
             ),
 
             DebouncedEvent::Error(err, path) => {
-                Err(HError::INotifyError(format!("{}, {:?}", err, path)))?
+                return Err(HError::INotifyError(format!("{}, {:?}", err, path)).into())
             }
-            DebouncedEvent::Rescan => Err(HError::INotifyError("Need to rescan".to_string()))?,
+            DebouncedEvent::Rescan => return Err(HError::INotifyError("Need to rescan".to_string()).into()),
             // Ignore NoticeRemove/NoticeWrite
-            _ => Err(failure::err_msg(
+            _ => return Err(failure::err_msg(
                 "NoticeRemove and NoticeWrite notify events are ignored",
-            ))?,
+            ).into()),
         };
 
         Ok(event)
@@ -474,9 +475,8 @@ fn watch_fs(
             let path = event.get_source_path()?;
             let dirpath = path
                 .parent()
-                .map(|path| path)
-                .unwrap_or(std::path::Path::new("/"));
-            let dir = File::new_from_path(&dirpath)?;
+                .unwrap_or_else(|| std::path::Path::new("/"));
+            let dir = File::new_from_path(dirpath)?;
             let event = FsEvent::try_from(event)?;
             Ok((dir, event))
         };
@@ -502,7 +502,7 @@ fn watch_fs(
                 .map(transform_event)
                 .flatten()
                 .fold(HashMap::with_capacity(1000), |mut events, (dir, event)| {
-                    events.entry(dir).or_insert(vec![]).push(event);
+                    events.entry(dir).or_insert_with(Vec::new).push(event);
 
                     events
                 });

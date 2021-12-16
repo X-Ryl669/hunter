@@ -97,7 +97,7 @@ where
 
     fn search_in(&self) -> Bindings<Self::Action>;
     fn movement(&mut self, _movement: &Movement) -> HResult<()> {
-        Err(KeyBindError::MovementUndefined)?
+        return Err(KeyBindError::MovementUndefined.into())
     }
     fn do_key_ext(&mut self, key: Key) -> HResult<()> {
         let gkey = AnyKey::from(key);
@@ -107,7 +107,7 @@ where
             match self.movement(movement) {
                 Ok(()) => return Ok(()),
                 Err(HError::KeyBind(KeyBindError::MovementUndefined)) => {}
-                Err(e) => Err(e)?,
+                Err(e) => return Err(e),
             }
         }
 
@@ -126,8 +126,9 @@ where
 
         HError::undefined_key(key)
     }
+
     fn do_action(&mut self, _action: &Self::Action) -> HResult<()> {
-        Err(KeyBindError::MovementUndefined)?
+        Err(KeyBindError::MovementUndefined.into())
     }
 }
 
@@ -212,7 +213,7 @@ impl FoldableWidgetExt for ListView<Vec<LogEntry>> {
             let hint_ypos = ysize + ypos + 1;
 
             let sized_description =
-                term::sized_string_u(&description, xsize - (line_hint.len() + 2));
+                term::sized_string_u(description, xsize - (line_hint.len() + 2));
 
             let footer = format!(
                 "{}{}{}{}{}",
@@ -236,16 +237,10 @@ trait LogList {
 
 impl LogList for Vec<LogEntry> {
     fn refresh_logs(&mut self) -> HResult<usize> {
-        let logs = crate::fail::get_logs()?;
+        let mut logs = crate::fail::get_logs()?;
+        let n = logs.len();
 
-        let mut logentries = logs
-            .into_iter()
-            .map(|log| LogEntry::from(log))
-            .collect::<Vec<_>>();
-
-        let n = logentries.len();
-
-        self.append(&mut logentries);
+        self.append(&mut logs);
 
         Ok(n)
     }
@@ -262,7 +257,7 @@ pub trait Foldable {
         if !self.is_folded() && self.content().is_some() {
             self.content().unwrap()
         } else {
-            &self.description()
+            self.description()
         }
     }
 
@@ -357,7 +352,7 @@ where
     fn render(&self) -> Vec<String> {
         let rendering = FoldableWidgetExt::render(self);
         // HACK to check if no custom renderer
-        if rendering.len() > 0 {
+        if !rendering.is_empty() {
             return rendering;
         }
 
@@ -420,7 +415,7 @@ where
                     self.move_down()
                 }
             }
-            _ => Err(KeyBindError::MovementUndefined)?,
+            _ => return Err(KeyBindError::MovementUndefined.into()),
         }
 
         Ok(())

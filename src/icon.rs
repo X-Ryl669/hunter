@@ -2,7 +2,7 @@
 // Apache License 2.0
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{PathBuf, Path};
 
 pub struct Icons {
     icons_by_name: HashMap<&'static str, &'static str>,
@@ -32,7 +32,7 @@ impl Icons {
         }
     }
 
-    pub fn get(&self, name: &PathBuf) -> &'static str {
+    pub fn get(&self, name: &Path) -> &'static str {
         let file_name = name
             .file_name()
             .and_then(|name| name.to_str())
@@ -57,7 +57,7 @@ impl Icons {
         }
 
         // Use the default icons.
-        return self.default_file_icon;
+        self.default_file_icon
     }
 
     fn get_default_icons_by_name() -> HashMap<&'static str, &'static str> {

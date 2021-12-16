@@ -45,7 +45,7 @@ where
     fn do_action(&mut self, action: &Self::Action) -> HResult<()>;
 
     fn movement(&mut self, _movement: &Movement) -> HResult<()> {
-        Err(KeyBindError::MovementUndefined)?
+        return Err(KeyBindError::MovementUndefined.into());
     }
 
     fn do_key(&mut self, key: Key) -> HResult<()> {
@@ -56,7 +56,7 @@ where
             match self.movement(movement) {
                 Ok(()) => return Ok(()),
                 Err(HError::KeyBind(KeyBindError::MovementUndefined)) => {}
-                Err(e) => Err(e)?,
+                Err(e) => return Err(e),
             }
         }
 
@@ -77,7 +77,7 @@ where
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct KeyBinds {
     pub movement: Bindings<Movement>,
     pub filebrowser: Bindings<FileBrowserAction>,
@@ -90,24 +90,6 @@ pub struct KeyBinds {
     pub fold: Bindings<FoldAction>,
     pub log: Bindings<LogAction>,
     pub quickaction: Bindings<QuickActionAction>,
-}
-
-impl Default for KeyBinds {
-    fn default() -> Self {
-        KeyBinds {
-            movement: Bindings::default(),
-            filebrowser: Bindings::default(),
-            filelist: Bindings::default(),
-            tab: Bindings::default(),
-            media: Bindings::default(),
-            bookmark: Bindings::default(),
-            process: Bindings::default(),
-            minibuffer: Bindings::default(),
-            fold: Bindings::default(),
-            log: Bindings::default(),
-            quickaction: Bindings::default(),
-        }
-    }
 }
 
 impl KeyBinds {
@@ -229,7 +211,7 @@ impl FromStr for AnyKey {
             return Ok(key);
         }
 
-        if key.starts_with("F") && key.len() == 2 {
+        if key.starts_with('F') && key.len() == 2 {
             let chr = key.get(1..2);
 
             if chr == Some("_") {
@@ -313,7 +295,7 @@ impl FromStr for CharOrNum {
     type Err = KeyBindError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let s = s.trim_start_matches("(").trim_end_matches(")");
+        let s = s.trim_start_matches('(').trim_end_matches(')');
 
         if s == "_" {
             return Ok(Self::Any);
@@ -343,7 +325,7 @@ where
             .map(|split_pos| {
                 let split = action_str.split_at(split_pos);
                 let action = split.0;
-                let param = split.1.trim_start_matches("(").trim_end_matches(")");
+                let param = split.1.trim_start_matches('(').trim_end_matches(')');
                 (action, param.parse().log_and().ok())
             })
             .unwrap_or((action_str, None))
@@ -398,7 +380,7 @@ where
                 continue;
             }
 
-            for key_str in keys_str.split(",") {
+            for key_str in keys_str.split(',') {
                 let key_str = key_str.trim();
 
                 let key = key_str.parse::<AnyKey>().map_err(|_| {
@@ -482,10 +464,10 @@ pub enum FileListAction {
 
 #[derive(EnumString, EnumIter, Copy, Clone, Display, Debug)]
 pub enum TabAction {
-    NewTab,
-    CloseTab,
-    NextTab,
-    PrevTab,
+    New,
+    Close,
+    Next,
+    Prev,
     GotoTab(usize),
 }
 
@@ -706,10 +688,10 @@ impl Default for Bindings<TabAction> {
 
         for action in TabAction::iter() {
             let key = match action {
-                NewTab => Ctrl('t').into(),
-                NextTab => Char('\t').into(),
-                PrevTab => BackTab.into(),
-                CloseTab => Ctrl('w').into(),
+                New => Ctrl('t').into(),
+                Next => Char('\t').into(),
+                Prev => BackTab.into(),
+                Close => Ctrl('w').into(),
                 GotoTab(_) => AnyKey::AnyF,
             };
 
