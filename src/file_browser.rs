@@ -176,7 +176,7 @@ impl Tabbable for TabView<FileBrowser> {
                 let selected_files = self
                     .widgets
                     .iter()
-                    .map(|w| w.selected_files().unwrap_or(vec![]))
+                    .map(|w| w.selected_files().unwrap_or_else(|_| vec![]))
                     .collect();
 
                 self.widgets[self.active].exec_cmd(tab_dirs, selected_files)
@@ -646,7 +646,7 @@ impl FileBrowser {
     }
 
     pub fn go_home(&mut self) -> HResult<()> {
-        let home = crate::paths::home_path().unwrap_or(PathBuf::from("~/"));
+        let home = crate::paths::home_path().unwrap_or_else(|_| PathBuf::from("~/"));
         let home = File::new_from_path(&home)?;
         self.main_widget_goto(&home)
     }
@@ -678,7 +678,7 @@ impl FileBrowser {
 
             if let Err(HError::WidgetResizedError) = bookmark {
                 let coords = &self.core.coordinates;
-                self.bookmarks.lock().set_coordinates(&coords).log();
+                self.bookmarks.lock().set_coordinates(coords).log();
                 self.core.screen.clear().log();
                 self.refresh().log();
                 self.draw().log();
@@ -706,7 +706,7 @@ impl FileBrowser {
         let cwd = self.cwd.path.to_string_lossy().to_string();
         let coords = &self.core.coordinates;
 
-        self.bookmarks.lock().set_coordinates(&coords).log();
+        self.bookmarks.lock().set_coordinates(coords).log();
         self.bookmarks.lock().add(&cwd)?;
         Ok(())
     }
@@ -730,14 +730,11 @@ impl FileBrowser {
         let file = self.selected_file()?;
 
         // Don't even call previewer on empty files to save CPU cycles
-        match (file.is_dir(), file.calculate_size()) {
-            (false, Ok((size, unit))) => {
-                if size == 0 && unit == "" {
-                    self.preview_widget_mut()?.set_stale().log();
-                    return Ok(());
-                }
+        if let (false, Ok((size, unit))) = (file.is_dir(), file.calculate_size()) {
+            if size == 0 && unit == "" {
+                self.preview_widget_mut()?.set_stale().log();
+                return Ok(());
             }
-            _ => {}
         }
 
         let preview = self.preview_widget_mut()?;
@@ -771,7 +768,7 @@ impl FileBrowser {
                 let dir = dir.ok_or_else(|| failure::err_msg("Couldn't get parent of cwd"))?;
 
                 self.fs_cache
-                    .set_selection(dir.clone(), selected_file.clone())
+                    .set_selection(dir, selected_file.clone())
             })
             .log();
 
@@ -847,8 +844,9 @@ impl FileBrowser {
             .content
             .get_selected()
             .into_iter()
-            .map(|f| f.clone())
+            .cloned()
             .collect();
+
         Ok(files)
     }
 
@@ -1008,12 +1006,15 @@ impl FileBrowser {
         // Helper function to restore any previous filter/selection
         let dir_restore =
             |s: &mut FileBrowser, filter: Option<Option<String>>, file: Option<File>| {
-                s.main_widget_mut()
-                    .map(|mw| {
-                        filter.map(|f| mw.set_filter(f));
-                        file.map(|f| mw.select_file(&f));
-                    })
-                    .log();
+                if let Ok(mw) = s.main_widget_mut().log_and() {
+                    if let Some(filter) = filter {
+                        mw.set_filter(filter);
+                    }
+
+                    if let Some(file) = file {
+                        mw.select_file(&file);
+                    }
+                }
             };
 
         loop {
@@ -1131,7 +1132,7 @@ impl FileBrowser {
     }
 
     fn external_select(&mut self) -> HResult<()> {
-        let shell = std::env::var("SHELL").unwrap_or("bash".into());
+        let shell = std::env::var("SHELL").unwrap_or_else(|_| "bash".into());
         let cmd = self.core.config.read().get()?.select_cmd.clone();
 
         self.core.get_sender().send(Events::InputEnabled(false))?;
@@ -1174,11 +1175,11 @@ impl FileBrowser {
                         let path = &paths[0];
                         if path.exists() {
                             if path.is_dir() {
-                                let dir = File::new_from_path(&path)?;
+                                let dir = File::new_from_path(path)?;
 
                                 self.main_widget_goto(&dir).log();
                             } else if path.is_file() {
-                                let file = File::new_from_path(&path)?;
+                                let file = File::new_from_path(path)?;
                                 let dir = file.parent_as_file()?.unwrap_or_else(|| {
                                     panic!(
                                         "Couldn't get parent directory of file '{}'",
@@ -1219,13 +1220,14 @@ impl FileBrowser {
                                 self.main_widget_goto_wait(&file_dir?).log();
                             }
 
-                            self.main_widget_mut()?
+                            let file = self.main_widget_mut()?
                                 .content
-                                .find_file_with_path(&file_path)
-                                .map(|file| {
-                                    file.toggle_selection();
-                                    last_file = Some(file.clone());
-                                });
+                                .find_file_with_path(&file_path);
+
+                            if let Some(file) = file {
+                                file.toggle_selection();
+                                last_file = Some(file.clone());
+                            }
                         }
 
                         self.main_widget_mut()
@@ -1246,7 +1248,7 @@ impl FileBrowser {
     }
 
     fn external_cd(&mut self) -> HResult<()> {
-        let shell = std::env::var("SHELL").unwrap_or("bash".into());
+        let shell = std::env::var("SHELL").unwrap_or_else(|_| "bash".into());
         let cmd = self.core.config.read().get()?.cd_cmd.clone();
 
         self.core.get_sender().send(Events::InputEnabled(false))?;
@@ -1343,7 +1345,7 @@ impl FileBrowser {
             .log();
         self.core.screen.suspend().log();
 
-        let shell = std::env::var("SHELL").unwrap_or("bash".into());
+        let shell = std::env::var("SHELL").unwrap_or_else(|_| "bash".into());
         let status = std::process::Command::new(&shell).status();
 
         self.core.screen.activate().log();
@@ -1406,10 +1408,10 @@ impl FileBrowser {
 
     pub fn quick_action(&self) -> HResult<()> {
         let files = self.selected_files()?;
-        let files = if files.len() > 0 {
+        let files = if !files.is_empty() {
             files
         } else {
-            vec![self.selected_file()?.clone()]
+            vec![self.selected_file()?]
         };
 
         let sender = self.core.get_sender();
@@ -1425,10 +1427,10 @@ impl FileBrowser {
         let ypos = self.get_coordinates()?.position().y();
         let file = self.selected_file()?;
 
-        let permissions = file.pretty_print_permissions().unwrap_or("NOPERMS".into());
-        let user = file.pretty_user().unwrap_or("NOUSER".into());
-        let group = file.pretty_group().unwrap_or("NOGROUP".into());
-        let mtime = file.pretty_mtime().unwrap_or("NOMTIME".into());
+        let permissions = file.pretty_print_permissions().unwrap_or_else(|_| "NOPERMS".into());
+        let user = file.pretty_user().unwrap_or_else(|| "NOUSER".into());
+        let group = file.pretty_group().unwrap_or_else(|| "NOGROUP".into());
+        let mtime = file.pretty_mtime().unwrap_or_else(|| "NOMTIME".into());
         let target = if let Some(target) = &file.target {
             "--> ".to_string() + &target.short_string()
         } else {
@@ -1451,7 +1453,7 @@ impl FileBrowser {
 
         let fs = self.fs_stat.read().find_fs(&file.path)?.clone();
 
-        let dev = fs.get_dev().unwrap_or(String::from(""));
+        let dev = fs.get_dev().unwrap_or_else(|| String::from(""));
         let free_space = fs.get_free();
         let total_space = fs.get_total();
         let space = format!("{}{} / {}", dev, free_space, total_space);
