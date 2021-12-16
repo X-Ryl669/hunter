@@ -24,7 +24,7 @@ pub trait PathBufMime {
 
 impl PathBufMime for PathBuf {
     fn get_mime(&self) -> HResult<String> {
-        let file = File::new_from_path(&self).map_err(|e| MimeError::AccessFailed(Box::new(e)))?;
+        let file = File::new_from_path(self).map_err(|e| MimeError::AccessFailed(Box::new(e)))?;
 
         file.get_mime()
             .map(|mime| Ok(format!("{}", mime)))

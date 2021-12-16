@@ -106,7 +106,7 @@ impl ActingExt for QuickActionView {
     fn movement(&mut self, movement: &Movement) -> HResult<()> {
         match movement {
             Movement::Right => self.run_action(None),
-            _ => Err(KeyBindError::MovementUndefined)?,
+            _ => Err(KeyBindError::MovementUndefined.into()),
         }
     }
 
@@ -155,7 +155,9 @@ impl ListView<Vec<QuickActions>> {
     }
 
     fn run_action(&mut self, num: Option<usize>) -> HResult<()> {
-        num.map(|num| self.set_selection(num));
+        if let Some(num) = num {
+            self.set_selection(num);
+        }
 
         let current_fold = self
             .current_fold()
@@ -446,36 +448,35 @@ impl QuickFiles for Vec<File> {
         self.iter().fold(first_mime, |common_mime, file| {
             let cur_mime = file.get_mime().log_and().ok();
 
-            if &cur_mime == &common_mime {
-                cur_mime
-            } else {
-                // MIMEs differ, find common base
+            if cur_mime == common_mime {
+                return cur_mime;
+            }
+                
+            // MIMEs differ, find common base
+            match (cur_mime, common_mime) {
+                (Some(cur_mime), Some(common_mime)) => {
+                    // Differ in suffix?
 
-                match (cur_mime, common_mime) {
-                    (Some(cur_mime), Some(common_mime)) => {
-                        // Differ in suffix?
-
-                        if cur_mime.type_() == common_mime.type_()
-                            && cur_mime.subtype() == common_mime.subtype()
-                        {
-                            Mime::from_str(&format!(
-                                "{}/{}",
-                                cur_mime.type_().as_str(),
-                                cur_mime.subtype().as_str()
-                            ))
-                            .ok()
-                        }
-                        // Differ in subtype?
-                        else if cur_mime.type_() == common_mime.type_() {
-                            Mime::from_str(&format!("{}/", cur_mime.type_().as_str())).ok()
-
-                            // Completely different MIME types
-                        } else {
-                            None
-                        }
+                    if cur_mime.type_() == common_mime.type_()
+                        && cur_mime.subtype() == common_mime.subtype()
+                    {
+                        Mime::from_str(&format!(
+                            "{}/{}",
+                            cur_mime.type_().as_str(),
+                            cur_mime.subtype().as_str()
+                        ))
+                        .ok()
                     }
-                    _ => None,
+                    // Differ in subtype?
+                    else if cur_mime.type_() == common_mime.type_() {
+                        Mime::from_str(&format!("{}/", cur_mime.type_().as_str())).ok()
+
+                        // Completely different MIME types
+                    } else {
+                        None
+                    }
                 }
+                _ => None,
             }
         })
     }
@@ -507,7 +508,7 @@ pub trait QuickPath {
 impl QuickPath for PathBuf {
     fn get_title(&self) -> String {
         self.file_stem()
-            .map(|stem| stem.to_string_lossy().splitn(2, "?").collect::<Vec<&str>>()[0].to_string())
+            .map(|stem| stem.to_string_lossy().splitn(2, '?').collect::<Vec<&str>>()[0].to_string())
             .unwrap_or_else(|| String::from("Filename missing!"))
     }
 
@@ -515,20 +516,20 @@ impl QuickPath for PathBuf {
         self.file_stem()
             .map(|stem| {
                 stem.to_string_lossy()
-                    .split("?")
+                    .split('?')
                     .collect::<Vec<&str>>()
                     .iter()
                     .skip(1)
                     // Remove ! in queries from sync actions
-                    .map(|q| q.trim_end_matches("!").to_string())
+                    .map(|q| q.trim_end_matches('!').to_string())
                     .collect()
             })
-            .unwrap_or_else(|| vec![])
+            .unwrap_or_else(Vec::new)
     }
 
     fn get_sync(&self) -> bool {
         self.file_stem()
-            .map(|stem| stem.to_string_lossy().ends_with("!"))
+            .map(|stem| stem.to_string_lossy().ends_with('!'))
             .unwrap_or(false)
     }
 }
