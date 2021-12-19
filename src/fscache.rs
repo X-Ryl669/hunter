@@ -388,7 +388,7 @@ impl FsCache {
 
     fn extract_tab_settings(files: &Files, selection: Option<File>) -> TabSettings {
         TabSettings {
-            selection: selection,
+            selection,
             multi_selections: files.get_selected().into_iter().cloned().collect(),
             dir_settings: DirSettings {
                 sort: files.sort,

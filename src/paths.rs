@@ -1,5 +1,3 @@
-use dirs_2;
-
 use std::path::PathBuf;
 
 use crate::fail::HResult;

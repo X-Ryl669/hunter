@@ -187,7 +187,7 @@ impl MediaView {
                     std::thread::spawn(move || -> HResult<()> {
                         for cmd in rx_cmd.lock().iter() {
                             write!(stdin, "{}", cmd)?;
-                            write!(stdin, "\n")?;
+                            writeln!(stdin)?;
                             stdin.flush()?;
                         }
                         Ok(())

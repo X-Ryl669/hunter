@@ -81,7 +81,7 @@ impl<W: Widget + Send + 'static> AsyncWidget<W> {
         widget.run().log();
 
         AsyncWidget {
-            widget: widget,
+            widget,
             core: core.clone(),
         }
     }
@@ -298,10 +298,10 @@ impl Previewer {
         });
 
         Previewer {
-            widget: widget,
+            widget,
             core: core.clone(),
             file: None,
-            cache: cache,
+            cache,
             animator: Stale::new(),
         }
     }

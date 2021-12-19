@@ -181,7 +181,7 @@ impl MiniBuffer {
         let mut core = core.clone();
         core.coordinates = coordinates;
         MiniBuffer {
-            core: core,
+            core,
             query: String::new(),
             input: String::new(),
             position: 0,

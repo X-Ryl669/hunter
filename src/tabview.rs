@@ -195,7 +195,7 @@ where
     fn on_key(&mut self, key: Key) -> HResult<()> {
         match self.do_key(key) {
             Err(HError::WidgetUndefinedKeyError { .. }) => Tabbable::on_key(self, key)?,
-            e @ _ => e?,
+            e => e?,
         }
 
         Ok(())

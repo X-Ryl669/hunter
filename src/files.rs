@@ -14,16 +14,13 @@ use std::sync::{Arc, RwLock};
 use derivative::Derivative;
 
 use chrono::TimeZone;
-use failure;
 use failure::Error;
 use failure::Fail;
 use lscolors::LsColors;
-use mime_guess;
 use natord::compare;
 use nix::{dir::*, fcntl::OFlag, sys::stat::Mode};
 use rayon::prelude::*;
 use rayon::{ThreadPool, ThreadPoolBuilder};
-use tree_magic_fork;
 use users::{get_current_groupname, get_current_username, get_group_by_gid, get_user_by_uid};
 
 use async_value::{Async, Stale, StopIter};
@@ -253,7 +250,7 @@ impl RefreshPackage {
             return RefreshPackage {
                 new_files: None,
                 new_len: 0,
-                jobs: jobs,
+                jobs,
             };
         }
 
@@ -280,8 +277,8 @@ impl RefreshPackage {
 
         RefreshPackage {
             new_files: Some(files),
-            new_len: new_len,
-            jobs: jobs,
+            new_len,
+            jobs,
         }
     }
 }
@@ -576,12 +573,12 @@ pub fn from_getdents(
 
                     // Finally the File is created
                     let file = File {
-                        name: name,
-                        hidden: hidden,
-                        kind: kind,
-                        path: path,
+                        name,
+                        hidden,
+                        kind,
+                        path,
                         dirsize: None,
-                        target: target,
+                        target,
                         meta: None,
                         selected: false,
                         tag: None,
@@ -882,15 +879,15 @@ impl Files {
         move |a, b| match sort {
             SortBy::Name => match dircmp(a, b) {
                 Equal => namecmp(a, b),
-                ord @ _ => ord,
+                ord => ord,
             },
             SortBy::Size => match dircmp(a, b) {
                 Equal => sizecmp(a, b),
-                ord @ _ => ord,
+                ord => ord,
             },
             SortBy::MTime => match dircmp(a, b) {
                 Equal => timecmp(a, b),
-                ord @ _ => ord,
+                ord => ord,
             },
         }
     }
@@ -1137,13 +1134,13 @@ impl File {
 
         File {
             name: name.to_string(),
-            hidden: hidden,
+            hidden,
             kind: if path.is_dir() {
                 Kind::Directory
             } else {
                 Kind::File
             },
-            path: path,
+            path,
             dirsize: None,
             target: None,
             meta: None,
@@ -1200,12 +1197,12 @@ impl File {
         };
 
         File {
-            name: name,
-            hidden: hidden,
-            kind: kind,
-            path: path,
+            name,
+            hidden,
+            kind,
+            path,
             dirsize: None,
-            target: target,
+            target,
             meta: None,
             selected: false,
             tag: None,

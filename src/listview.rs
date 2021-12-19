@@ -173,7 +173,7 @@ where
 {
     pub fn new(core: &WidgetCore, content: T) -> ListView<T> {
         let mut view = ListView::<T> {
-            content: content,
+            content,
             current_item: None,
             selection: 0,
             offset: 0,
@@ -274,8 +274,8 @@ pub struct FileListBuilder {
 impl FileListBuilder {
     pub fn new(core: WidgetCore, source: FileSource) -> Self {
         FileListBuilder {
-            core: core,
-            source: source,
+            core,
+            source,
             cache: None,
             selected_file: None,
             stale: None,

@@ -517,7 +517,7 @@ impl ProcView {
         hbox.refresh().log();
         ProcView {
             core: core.clone(),
-            hbox: hbox,
+            hbox,
             viewing: None,
             animator: Stale::new(),
         }

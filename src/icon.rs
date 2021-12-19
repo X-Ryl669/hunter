@@ -2,7 +2,7 @@
 // Apache License 2.0
 
 use std::collections::HashMap;
-use std::path::{PathBuf, Path};
+use std::path::Path;
 
 pub struct Icons {
     icons_by_name: HashMap<&'static str, &'static str>,

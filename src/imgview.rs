@@ -26,7 +26,7 @@ pub struct ImgView {
 impl ImgView {
     pub fn new_from_file(core: WidgetCore, file: &Path) -> HResult<ImgView> {
         let mut view = ImgView {
-            core: core,
+            core,
             buffer: vec![],
             file: Some(file.to_path_buf()),
         };

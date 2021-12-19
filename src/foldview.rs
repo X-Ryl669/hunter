@@ -79,9 +79,9 @@ impl From<&HError> for LogEntry {
         let lines = content.lines().count();
 
         LogEntry {
-            description: description,
+            description,
             content: Some(content),
-            lines: lines,
+            lines,
             folded: true,
         }
     }
@@ -326,12 +326,10 @@ where
             .fold((0, None), |(lines, fold_pos), (i, current_fold_lines)| {
                 if fold_pos.is_some() {
                     (lines, fold_pos)
+                } else if lines + current_fold_lines > pos {
+                    (lines, Some(i))
                 } else {
-                    if lines + current_fold_lines > pos {
-                        (lines, Some(i))
-                    } else {
-                        (lines + current_fold_lines, None)
-                    }
+                    (lines + current_fold_lines, None)
                 }
             })
             .1

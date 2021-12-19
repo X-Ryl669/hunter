@@ -59,7 +59,7 @@ impl TextView {
             .collect::<HResult<_>>()?;
 
         Ok(TextView {
-            lines: lines,
+            lines,
             core: core.clone(),
             follow: false,
             offset: 0,

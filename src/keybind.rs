@@ -145,7 +145,7 @@ impl Display for AnyKey {
                 Alt(ch) => write!(fmt, "M-{}", ch),
                 Ctrl(ch) => write!(fmt, "C-{}", ch),
                 F(n) => write!(fmt, "F{}", n),
-                k @ _ => write!(fmt, "{:?}", k),
+                k => write!(fmt, "{:?}", k),
             },
             AnyChar => write!(fmt, "_"),
             AnyF => write!(fmt, "F_"),

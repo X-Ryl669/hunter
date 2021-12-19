@@ -1,7 +1,6 @@
 use std::io::{BufRead, BufWriter, Stdout, Write};
 use std::sync::Arc;
 
-use termion;
 use termion::raw::{IntoRawMode, RawTerminal};
 use termion::screen::AlternateScreen;
 
@@ -31,7 +30,7 @@ impl Screen {
         Ok(Screen {
             screen: Arc::new(Mutex::new(screen)),
             size: Arc::new(RwLock::new(None)),
-            terminal: terminal,
+            terminal,
         })
     }
 

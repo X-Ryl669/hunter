@@ -124,13 +124,11 @@ impl ActingExt for QuickActionView {
                         self.set_selection(num);
                         return Ok(());
                     // activate the action the second time the key is pressed
+                    } else if self.is_description_selected() {
+                        self.toggle_fold()?;
                     } else {
-                        if self.is_description_selected() {
-                            self.toggle_fold()?;
-                        } else {
-                            self.run_action(Some(num))?;
-                            HError::popup_finnished()?
-                        }
+                        self.run_action(Some(num))?;
+                        HError::popup_finnished()?
                     }
                 }
                 Ok(())
@@ -229,14 +227,14 @@ impl QuickActions {
         actions.run()?;
 
         Ok(QuickActions {
-            description: description,
-            files: files,
-            mime: mime,
+            description,
+            files,
+            mime,
             content: None,
             lines: 1,
             folded: false,
-            actions: actions,
-            proc_view: proc_view,
+            actions,
+            proc_view,
         })
     }
 }
@@ -293,7 +291,7 @@ pub fn open(
             Err(HError::RefreshParent) => continue,
             Err(HError::WidgetResizedError) => continue,
             Err(HError::TerminalResizedError) => continue,
-            r @ _ => break r,
+            r => break r,
         }
     }
 }
@@ -422,7 +420,7 @@ impl QuickAction {
                 args: Some(files),
                 vars: Some(answers),
                 short_cmd: None,
-                cwd: cwd,
+                cwd,
                 cwd_files: None,
                 tab_files: None,
                 tab_paths: None,

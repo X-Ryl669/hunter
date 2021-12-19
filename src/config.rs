@@ -1,4 +1,3 @@
-use clap;
 use lazy_static::lazy_static;
 
 use std::sync::RwLock;
@@ -39,15 +38,15 @@ pub fn set_argv_config(args: clap::ArgMatches) -> HResult<()> {
 
     let mut config = ArgvConfig::new();
 
-    if animation == true {
+    if animation {
         config.animation = Some(false);
     }
 
-    if show_hidden == true {
+    if show_hidden {
         config.show_hidden = Some(true);
     }
 
-    if icons == true {
+    if icons {
         config.icons = Some(true)
     }
 
@@ -68,12 +67,23 @@ fn get_argv_config() -> HResult<ArgvConfig> {
 }
 
 fn infuse_argv_config(mut config: Config) -> Config {
-    let argv_config = get_argv_config().unwrap_or(ArgvConfig::new());
+    let argv_config = get_argv_config().unwrap_or_else(|_| ArgvConfig::new());
 
-    argv_config.animation.map(|val| config.animation = val);
-    argv_config.show_hidden.map(|val| config.show_hidden = val);
-    argv_config.icons.map(|val| config.icons = val);
-    argv_config.graphics.map(|val| config.graphics = val);
+    if let Some(animation) = argv_config.animation {
+        config.animation = animation;
+    }
+
+    if let Some(show_hidden) = argv_config.show_hidden {
+        config.show_hidden = show_hidden;
+    }
+
+    if let Some(icons) = argv_config.icons {
+        config.icons = icons;
+    }
+
+    if let Some(graphics) = argv_config.graphics {
+        config.graphics = graphics;
+    }
 
     config
 }
@@ -180,8 +190,7 @@ impl Config {
                                 && ratios_sum > 0
                                 && ratios
                                     .iter()
-                                    .filter(|&r| *r > u16::max_value() as usize)
-                                    .next()
+                                    .find(|&r| *r > u16::max_value() as usize)
                                     == None
                             {
                                 config.ratios = ratios;
@@ -198,8 +207,8 @@ impl Config {
                 }
 
                 #[cfg(feature = "img")]
-                match has_media_previewer(&config.media_previewer) {
-                    t @ _ => config.media_previewer_exists = t,
+                {
+                    config.media_previewer_exists = has_media_previewer(&config.media_previewer);
                 }
 
                 config
@@ -213,8 +222,8 @@ impl Config {
         Ok(config)
     }
 
-    fn prep_line<'a>(line: &'a str) -> HResult<(&'a str, &'a str)> {
-        let setting = line.split("=").collect::<Vec<&str>>();
+    fn prep_line(line: &str) -> HResult<(&str, &str)> {
+        let setting = line.split('=').collect::<Vec<&str>>();
         if setting.len() == 2 {
             Ok((setting[0], setting[1]))
         } else {
