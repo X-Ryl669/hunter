@@ -97,8 +97,9 @@ where
 
     fn search_in(&self) -> Bindings<Self::Action>;
     fn movement(&mut self, _movement: &Movement) -> HResult<()> {
-        return Err(KeyBindError::MovementUndefined.into())
+        Err(KeyBindError::MovementUndefined.into())
     }
+    
     fn do_key_ext(&mut self, key: Key) -> HResult<()> {
         let gkey = AnyKey::from(key);
 

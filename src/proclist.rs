@@ -331,7 +331,7 @@ impl ListView<Vec<Process>> {
         let short_cmd = cmd
             .short_cmd
             .unwrap_or_else(|| real_cmd.to_string_lossy().to_string());
-        let args = cmd.args.unwrap_or_else(|| Vec::new());
+        let args = cmd.args.unwrap_or_else(Vec::new);
 
         self.core
             .show_status(&format!("Running (fg): {}", &short_cmd))

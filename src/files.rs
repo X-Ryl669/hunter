@@ -1305,7 +1305,7 @@ impl File {
             Some(style) => style
                 .foreground
                 .as_ref()
-                .map(|c| crate::term::from_lscolor(c)),
+                .map(crate::term::from_lscolor),
             None => None,
         }
     }

@@ -390,8 +390,7 @@ impl ListView<Files> {
         let file = self
             .content
             .iter_files_from(self.selected_file(), seek_back)
-            .skip(skip)
-            .next();
+            .nth(skip);
 
         self.current_item = file.cloned();
     }

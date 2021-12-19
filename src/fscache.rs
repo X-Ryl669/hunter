@@ -199,7 +199,7 @@ impl FsCache {
 
     pub fn set_selection(&self, dir: File, selection: File) -> HResult<()> {
         self.tab_settings.write().map(|mut settings| {
-            let setting = settings.entry(dir).or_insert_with(|| TabSettings::new());
+            let setting = settings.entry(dir).or_insert_with(TabSettings::new);
             setting.selection = Some(selection);
         })?;
         Ok(())
@@ -454,7 +454,7 @@ impl TryFrom<DebouncedEvent> for FsEvent {
             DebouncedEvent::Error(err, path) => {
                 return Err(HError::INotifyError(format!("{}, {:?}", err, path)).into())
             }
-            DebouncedEvent::Rescan => return Err(HError::INotifyError("Need to rescan".to_string()).into()),
+            DebouncedEvent::Rescan => return Err(HError::INotifyError("Need to rescan".to_string())),
             // Ignore NoticeRemove/NoticeWrite
             _ => return Err(failure::err_msg(
                 "NoticeRemove and NoticeWrite notify events are ignored",
