@@ -87,12 +87,12 @@ impl TextView {
 
     pub fn load_full(&mut self) {
         if self.limited {
-            let new_view = self.file
+            let new_view = self
+                .file
                 .as_ref()
                 .and_then(|f| TextView::new_from_file(&self.core, f).ok());
 
-            if let Some(v) = new_view
-            {
+            if let Some(v) = new_view {
                 *self = v;
                 self.limited = false;
             }

@@ -353,13 +353,17 @@ impl ListView<Vec<Process>> {
                     format!(
                         "{}{}",
                         term::color_green(),
-                        status.code().unwrap_or_else(|| status.signal().unwrap_or(-1))
+                        status
+                            .code()
+                            .unwrap_or_else(|| status.signal().unwrap_or(-1))
                     )
                 } else {
                     format!(
                         "{}{}",
                         term::color_red(),
-                        status.code().unwrap_or_else(|| status.signal().unwrap_or(-1))
+                        status
+                            .code()
+                            .unwrap_or_else(|| status.signal().unwrap_or(-1))
                     )
                 };
 
@@ -739,7 +743,7 @@ impl Acting for ProcView {
             Close => {
                 self.animator.set_stale().log();
                 self.core.clear().log();
-                return Err(HError::PopupFinnished)
+                return Err(HError::PopupFinnished);
             }
             Remove => self.remove_proc()?,
             Kill => self.get_listview_mut().kill_proc()?,

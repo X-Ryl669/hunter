@@ -767,8 +767,7 @@ impl FileBrowser {
             .map(|dir| {
                 let dir = dir.ok_or_else(|| failure::err_msg("Couldn't get parent of cwd"))?;
 
-                self.fs_cache
-                    .set_selection(dir, selected_file.clone())
+                self.fs_cache.set_selection(dir, selected_file.clone())
             })
             .log();
 
@@ -840,12 +839,7 @@ impl FileBrowser {
 
     pub fn selected_files(&self) -> HResult<Vec<File>> {
         let widget = self.main_widget()?;
-        let files = widget
-            .content
-            .get_selected()
-            .into_iter()
-            .cloned()
-            .collect();
+        let files = widget.content.get_selected().into_iter().cloned().collect();
 
         Ok(files)
     }
@@ -1220,7 +1214,8 @@ impl FileBrowser {
                                 self.main_widget_goto_wait(&file_dir?).log();
                             }
 
-                            let file = self.main_widget_mut()?
+                            let file = self
+                                .main_widget_mut()?
                                 .content
                                 .find_file_with_path(&file_path);
 
@@ -1425,7 +1420,9 @@ impl FileBrowser {
         let ypos = self.get_coordinates()?.position().y();
         let file = self.selected_file()?;
 
-        let permissions = file.pretty_print_permissions().unwrap_or_else(|_| "NOPERMS".into());
+        let permissions = file
+            .pretty_print_permissions()
+            .unwrap_or_else(|_| "NOPERMS".into());
         let user = file.pretty_user().unwrap_or_else(|| "NOUSER".into());
         let group = file.pretty_group().unwrap_or_else(|| "NOGROUP".into());
         let mtime = file.pretty_mtime().unwrap_or_else(|| "NOMTIME".into());

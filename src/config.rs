@@ -188,10 +188,7 @@ impl Config {
                             let ratios_sum: usize = ratios.iter().sum();
                             if ratios.len() == 3
                                 && ratios_sum > 0
-                                && ratios
-                                    .iter()
-                                    .find(|&r| *r > u16::max_value() as usize)
-                                    == None
+                                && ratios.iter().find(|&r| *r > u16::max_value() as usize) == None
                             {
                                 config.ratios = ratios;
                             }

@@ -218,7 +218,7 @@ impl RefreshPackage {
                 Create(mut file) => {
                     let job = file.prepare_meta_job(cache);
                     if let Some(j) = job {
-                        jobs.push(j) 
+                        jobs.push(j)
                     }
 
                     new_files.push(file);
@@ -609,8 +609,7 @@ impl Files {
 
         let nonhidden = AtomicUsize::default();
 
-        let dir = Dir::open(path, OFlag::O_DIRECTORY, Mode::empty())
-            .map_err(FileError::OpenDir)?;
+        let dir = Dir::open(path, OFlag::O_DIRECTORY, Mode::empty()).map_err(FileError::OpenDir)?;
 
         let direntries = from_getdents(dir.as_raw_fd(), path, &nonhidden)?;
 
@@ -926,7 +925,7 @@ impl Files {
 
     fn remove_placeholder(&mut self) {
         let dirpath = self.directory.path.clone();
-        
+
         if let Some(placeholder) = self.find_file_with_path(&dirpath).cloned() {
             if let Some(item_index) = self.files.iter().position(|f| f == &placeholder) {
                 self.files.remove(item_index);
@@ -1247,13 +1246,10 @@ impl File {
     }
 
     pub fn refresh_meta_job(&mut self) -> Job {
-        let meta = self.meta.as_ref().map_or_else(
-            Arc::default,
-            |m| {
-                *m.write().unwrap() = None;
-                m.clone()
-            },
-        );
+        let meta = self.meta.as_ref().map_or_else(Arc::default, |m| {
+            *m.write().unwrap() = None;
+            m.clone()
+        });
 
         (self.path.clone(), Some(meta), None)
     }
@@ -1302,10 +1298,7 @@ impl File {
         let meta = meta.as_ref()?;
         match COLORS.style_for_path_with_metadata(&self.path, Some(meta)) {
             // TODO: Also handle bg color, bold, etc.?
-            Some(style) => style
-                .foreground
-                .as_ref()
-                .map(crate::term::from_lscolor),
+            Some(style) => style.foreground.as_ref().map(crate::term::from_lscolor),
             None => None,
         }
     }

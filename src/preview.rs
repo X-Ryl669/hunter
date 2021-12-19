@@ -235,15 +235,16 @@ fn find_previewer(file: &File, g_mode: bool) -> HResult<ExtPreviewer> {
             .find(|previewer| {
                 previewer
                     .as_ref()
-                    .map(|p| 
+                    .map(|p| {
                         p.path().file_stem() == Some(ext)
-                        && p.path().extension() == Some(std::ffi::OsStr::new("g"))                    )
+                            && p.path().extension() == Some(std::ffi::OsStr::new("g"))
+                    })
                     .unwrap_or(false)
             })
             .map(|p| p.map(|p| p.path()));
 
         if let Some(Ok(g_p)) = g_previewer {
-            return Ok(ExtPreviewer::Graphics(g_p))
+            return Ok(ExtPreviewer::Graphics(g_p));
         }
     }
 

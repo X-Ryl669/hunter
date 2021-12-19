@@ -449,7 +449,7 @@ impl QuickFiles for Vec<File> {
             if cur_mime == common_mime {
                 return cur_mime;
             }
-                
+
             // MIMEs differ, find common base
             match (cur_mime, common_mime) {
                 (Some(cur_mime), Some(common_mime)) => {

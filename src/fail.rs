@@ -124,7 +124,7 @@ impl HError {
         Err(HError::Quit)
     }
     pub fn wrong_ratio<T>(wnum: usize, ratio: Vec<usize>) -> HResult<T> {
-        Err(HError::HBoxWrongRatioError { wnum, ratio, })
+        Err(HError::HBoxWrongRatioError { wnum, ratio })
     }
     pub fn no_widget<T>() -> HResult<T> {
         Err(HError::NoWidgetError)
@@ -145,7 +145,7 @@ impl HError {
         Err(HError::WidgetUndefinedKeyError { key })
     }
     pub fn wrong_directory<T>(path: PathBuf, dir: PathBuf) -> HResult<T> {
-        Err(HError::WrongDirectoryError { path, dir, })
+        Err(HError::WrongDirectoryError { path, dir })
     }
     pub fn preview_failed<T>(file: &crate::files::File) -> HResult<T> {
         let name = file.name.clone();

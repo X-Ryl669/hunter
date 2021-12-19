@@ -454,11 +454,16 @@ impl TryFrom<DebouncedEvent> for FsEvent {
             DebouncedEvent::Error(err, path) => {
                 return Err(HError::INotifyError(format!("{}, {:?}", err, path)).into())
             }
-            DebouncedEvent::Rescan => return Err(HError::INotifyError("Need to rescan".to_string())),
+            DebouncedEvent::Rescan => {
+                return Err(HError::INotifyError("Need to rescan".to_string()))
+            }
             // Ignore NoticeRemove/NoticeWrite
-            _ => return Err(failure::err_msg(
-                "NoticeRemove and NoticeWrite notify events are ignored",
-            ).into()),
+            _ => {
+                return Err(failure::err_msg(
+                    "NoticeRemove and NoticeWrite notify events are ignored",
+                )
+                .into())
+            }
         };
 
         Ok(event)
@@ -473,9 +478,7 @@ fn watch_fs(
     std::thread::spawn(move || -> HResult<()> {
         let transform_event = move |event: DebouncedEvent| -> HResult<(File, FsEvent)> {
             let path = event.get_source_path()?;
-            let dirpath = path
-                .parent()
-                .unwrap_or_else(|| std::path::Path::new("/"));
+            let dirpath = path.parent().unwrap_or_else(|| std::path::Path::new("/"));
             let dir = File::new_from_path(dirpath)?;
             let event = FsEvent::try_from(event)?;
             Ok((dir, event))

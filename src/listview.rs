@@ -344,10 +344,10 @@ impl FileListBuilder {
 
         let mut view = ListView::new(&core, files);
 
-        let selected_file = selected_file
-            .or_else(|| c
-                .as_ref()
-                .and_then(|c| c.get_selection(&view.content.directory).ok().flatten()));
+        let selected_file = selected_file.or_else(|| {
+            c.as_ref()
+                .and_then(|c| c.get_selection(&view.content.directory).ok().flatten())
+        });
 
         if let Some(f) = selected_file {
             view.select_file(&f);
@@ -1005,7 +1005,7 @@ where
                     item,
                     term::reset()
                 );
-                
+
                 output
             })
             .collect::<String>();

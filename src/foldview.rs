@@ -99,7 +99,7 @@ where
     fn movement(&mut self, _movement: &Movement) -> HResult<()> {
         Err(KeyBindError::MovementUndefined.into())
     }
-    
+
     fn do_key_ext(&mut self, key: Key) -> HResult<()> {
         let gkey = AnyKey::from(key);
 

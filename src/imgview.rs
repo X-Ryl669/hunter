@@ -100,7 +100,7 @@ impl ImgView {
                 Some(code) => MediaError::MediaViewerFailed(code, ErrorCause::Str(stderr)),
                 None => MediaError::MediaViewerKilled,
             };
-            
+
             return Err(err.into());
         }
 

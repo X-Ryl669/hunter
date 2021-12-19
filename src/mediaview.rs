@@ -301,7 +301,7 @@ impl MediaView {
                 print!("{}", clear);
 
                 if let Some(runner) = runner {
-                     runner(autoplay, mute, height, position, duration).log();
+                    runner(autoplay, mute, height, position, duration).log();
                 }
             }
             Ok(())

@@ -461,8 +461,12 @@ pub trait Widget {
 
     fn draw(&mut self) -> HResult<()> {
         let output = self.get_drawlist().unwrap_or_else(|_| "".to_string())
-            + &self.get_header_drawlist().unwrap_or_else(|_| "".to_string())
-            + &self.get_footer_drawlist().unwrap_or_else(|_| "".to_string());
+            + &self
+                .get_header_drawlist()
+                .unwrap_or_else(|_| "".to_string())
+            + &self
+                .get_footer_drawlist()
+                .unwrap_or_else(|_| "".to_string());
         self.get_core()?.write_to_screen(&output).log();
         self.get_core()?.screen()?.flush().ok();
         Ok(())
