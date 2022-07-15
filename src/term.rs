@@ -444,7 +444,8 @@ pub fn header_color() -> String {
     format!(
         "{}{}",
         termion::color::Fg(termion::color::White),
-        termion::color::Bg(termion::color::Blue)
+        termion::color::Bg(termion::color::AnsiValue::rgb(0_u8, 0_u8, 1_u8)),
+//        termion::color::Bg(termion::color::Blue)
     )
 }
 
