@@ -963,8 +963,10 @@ impl FileBrowser {
             .map(|f| format!("\"{}\" ", &f.path.to_string_lossy()))
             .collect::<String>();
 
-        let mut filepath =
-            dirs_2::home_dir().ok_or_else(|| failure::err_msg("Couldn't get home directory"))?;
+        let mut filepath = match std::env::var("XDG_RUNTIME_DIR") {
+            Ok(var) => PathBuf::from(var),
+            Err(_) => dirs_2::home_dir().ok_or_else(|| failure::err_msg("Couldn't get home directory"))?
+        };
 
         filepath.push(".hunter_cwd");
 
